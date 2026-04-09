@@ -285,6 +285,26 @@ export async function saveCostApproval(itemId: string, status: "approved" | "rej
   return { success: true };
 }
 
+// ── 클레임 상태 변경 (COO) ────────────────────────────────────
+export async function updateClaimStatus(
+  claimId: string,
+  status: "pending" | "in_progress" | "resolved"
+) {
+  const session = await getSession();
+  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+
+  const db = createServerClient();
+  const { error } = await db
+    .from("claims")
+    .update({ status })
+    .eq("id", claimId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/claims");
+  revalidatePath("/coo");
+  return { success: true };
+}
+
 // ── 거래처 저장 ────────────────────────────────────────────────
 export async function saveCustomer(formData: FormData) {
   const session = await getSession();

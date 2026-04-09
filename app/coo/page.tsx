@@ -105,6 +105,17 @@ export default async function COOPage() {
           >
             <span>📦</span> 품목 마스터
           </a>
+          <a
+            href="/claims"
+            className="flex items-center gap-2 bg-white rounded-xl border border-red-200 px-4 py-2.5 hover:bg-red-50 transition-colors text-sm font-medium text-red-700"
+          >
+            <span>📋</span> 클레임 관리
+            {pendingClaimsCount ? (
+              <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold">
+                {pendingClaimsCount}
+              </span>
+            ) : null}
+          </a>
         </div>
 
         {/* 요약 카드 */}
