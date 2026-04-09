@@ -1,0 +1,371 @@
+"use server";
+
+import { createServerClient } from "@/lib/supabase";
+import { getSession } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
+
+export async function submitProductionLog(formData: FormData) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+
+  const db = createServerClient();
+  const { error } = await db.from("production_logs").insert({
+    work_date:    formData.get("date"),
+    worker_id:    session.id,
+    worker_name:  session.name,
+    dept:         session.dept ?? "",
+    product_id:   formData.get("product_id"),
+    product_name: formData.get("product_name"),
+    input_qty:    Number(formData.get("input_qty"))  || 0,
+    output_qty:   Number(formData.get("output_qty")) || 0,
+    waste_qty:    Number(formData.get("waste_qty"))  || 0,
+    pack_qty:     Number(formData.get("pack_qty"))   || 0,
+    issue_note:   formData.get("issue_note") || null,
+  });
+
+  if (error) throw new Error(error.message);
+  return { success: true };
+}
+
+export async function submitHygieneCheck(items: Record<string, boolean>, checkDate: string) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+
+  const db = createServerClient();
+  const { error } = await db.from("hygiene_checks").insert({
+    check_date:  checkDate,
+    worker_id:   session.id,
+    worker_name: session.name,
+    dept:        session.dept ?? "",
+    items,
+  });
+
+  if (error) throw new Error(error.message);
+  return { success: true };
+}
+
+export async function submitClaim(formData: FormData, productNames: string[]) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+
+  const db = createServerClient();
+  const { error } = await db.from("claims").insert({
+    claim_date:    formData.get("claim_date"),
+    worker_id:     session.id,
+    worker_name:   session.name,
+    dept:          session.dept ?? "",
+    client_name:   formData.get("client_name"),
+    product_names: productNames,
+    claim_type:    formData.get("claim_type"),
+    content:       formData.get("content"),
+  });
+
+  if (error) throw new Error(error.message);
+  return { success: true };
+}
+
+// ── 팀장 주간 보고 제출 ─────────────────────────────────────
+export async function submitDeptReport(
+  prevState: { error?: string; success?: boolean } | null,
+  formData: FormData
+) {
+  const session = await getSession();
+  if (!session || session.role !== "manager") return { error: "팀장 권한 필요" };
+
+  const db = createServerClient();
+  const dept = session.dept ?? "";
+
+  const payload = {
+    report_date:  formData.get("report_date") as string,
+    dept,
+    manager_id:   session.id,
+    manager_name: session.name,
+    rag_status:   formData.get("rag_status") as string,
+    issue:        formData.get("issue") as string,
+    detail:       (formData.get("detail") as string) || null,
+    next_action:  (formData.get("next_action") as string) || null,
+    status:       "submitted",
+  };
+
+  const { error } = await db
+    .from("dept_reports")
+    .upsert(payload, { onConflict: "report_date,dept" });
+
+  if (error) return { error: error.message };
+  revalidatePath("/team");
+  return { success: true };
+}
+
+// ── 가공팀 업무지시서 ────────────────────────────────────────
+export async function submitWorkOrder(
+  items: Array<{ product: string; pkg_unit_g: number; raw_input_kg: number; target_count: number; production_count: number; fat_loss_kg: number }>,
+  workers: string,
+  workHours: string,
+  orderDate: string
+) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const { error } = await db.from("work_orders").upsert({
+    order_date:  orderDate,
+    ordered_by:  session.name,
+    dept:        "가공팀",
+    work_hours:  workHours,
+    workers,
+    items,
+  }, { onConflict: "order_date,dept" });
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+  return { success: true };
+}
+
+// ── 두/내장 작업일지 ─────────────────────────────────────────
+export async function submitHeadWorkLog(
+  workDate: string,
+  headReceived: number,
+  headItems: object[],
+  innardItems: object[],
+  notes: string
+) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const { error } = await db.from("head_work_logs").upsert({
+    work_date:     workDate,
+    manager:       session.name,
+    head_received: headReceived,
+    head_items:    headItems,
+    innard_items:  innardItems,
+    notes,
+  }, { onConflict: "work_date" });
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+  return { success: true };
+}
+
+// ── 농협 유통 입고 두수 ─────────────────────────────────────
+export async function submitLivestockIntake(formData: FormData) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const { error } = await db.from("livestock_intake").upsert({
+    intake_date:  formData.get("intake_date"),
+    nh_ledger:    Number(formData.get("nh_ledger")) || 0,
+    nh_actual:    Number(formData.get("nh_actual")) || 0,
+    mokwuchon:    Number(formData.get("mokwuchon")) || 0,
+    recorded_by:  session.name,
+    notes:        formData.get("notes") || null,
+  }, { onConflict: "intake_date" });
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+  return { success: true };
+}
+
+// ── 수도/지하수 사용량 ──────────────────────────────────────
+export async function submitWaterUsage(formData: FormData) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const { error } = await db.from("water_usage").upsert({
+    usage_date:           formData.get("usage_date"),
+    water_reading:        Number(formData.get("water_reading")) || 0,
+    ground_water_reading: Number(formData.get("ground_water_reading")) || 0,
+    recorded_by:          session.name,
+    notes:                formData.get("notes") || null,
+  }, { onConflict: "usage_date" });
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+  return { success: true };
+}
+
+// ── 컨테이너 재고 ────────────────────────────────────────────
+export async function submitContainerInventory(
+  inventoryDate: string,
+  rows: Array<{ location: string; product_name: string; unit: string; prev_stock: number; incoming_qty: number; outgoing_qty: number; notes: string }>
+) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const inserts = rows.map((r) => ({ ...r, inventory_date: inventoryDate, recorded_by: session.name }));
+  const { error } = await db.from("container_inventory").insert(inserts);
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+  return { success: true };
+}
+
+// ── 품질 순찰일지 ────────────────────────────────────────────
+export async function submitQualityPatrol(
+  patrolDate: string,
+  patrolTime: string,
+  areas: string[],
+  issues: Array<{ area: string; description: string; severity: string; action: string }>,
+  overallStatus: string
+) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const { error } = await db.from("quality_patrol").insert({
+    patrol_date:    patrolDate,
+    patrol_time:    patrolTime,
+    inspector:      session.name,
+    dept:           session.dept ?? "품질팀",
+    areas,
+    issues,
+    overall_status: overallStatus,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+  return { success: true };
+}
+
+// ── 오딧 체크리스트 ─────────────────────────────────────────
+export async function submitAuditChecklist(
+  checkDate: string,
+  auditType: string,
+  items: Array<{ category: string; item: string; result: string; notes: string }>,
+  overallResult: string,
+  nextAction: string
+) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const { error } = await db.from("audit_checklist").insert({
+    check_date:     checkDate,
+    audit_type:     auditType,
+    inspector:      session.name,
+    items,
+    overall_result: overallResult,
+    next_action:    nextAction,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+  return { success: true };
+}
+
+// ── 생산계획 ────────────────────────────────────────────────
+export async function submitProductionPlan(
+  planDate: string,
+  todayPlans: object[],
+  nextPlans: object[],
+  notes: string
+) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const { error } = await db.from("production_plans").upsert({
+    plan_date:    planDate,
+    manager:      session.name,
+    today_plans:  todayPlans,
+    next_plans:   nextPlans,
+    notes,
+  }, { onConflict: "plan_date" });
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+  return { success: true };
+}
+
+// ── COO 비용 승인/반려 ────────────────────────────────────────
+export async function saveCostApproval(itemId: string, status: "approved" | "rejected", comment: string) {
+  const session = await getSession();
+  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+
+  const db = createServerClient();
+  const { error } = await db
+    .from("cost_approvals")
+    .update({
+      status,
+      comment:     comment || null,
+      approved_by: session.name,
+      approved_at: new Date().toISOString(),
+    })
+    .eq("id", itemId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/coo");
+  return { success: true };
+}
+
+// ── 거래처 저장 ────────────────────────────────────────────────
+export async function saveCustomer(formData: FormData) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+
+  const db = createServerClient();
+  const productsRaw = (formData.get("products") as string) || "";
+  const products = productsRaw
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const { error } = await db.from("customers").insert({
+    name:          formData.get("name") as string,
+    type:          (formData.get("type") as string) || "식당",
+    contact_name:  (formData.get("contact_name") as string) || null,
+    phone:         (formData.get("phone") as string) || null,
+    address:       (formData.get("address") as string) || null,
+    tax_id:        (formData.get("tax_id") as string) || null,
+    credit_limit:  Number(formData.get("credit_limit")) || 0,
+    payment_terms: Number(formData.get("payment_terms")) || 30,
+    products:      products.length > 0 ? products : null,
+    monthly_avg:   Number(formData.get("monthly_avg")) || 0,
+    memo:          (formData.get("memo") as string) || null,
+    active:        true,
+  });
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+  return { success: true };
+}
+
+// ── 납품전표 제출 ────────────────────────────────────────────
+export async function submitDelivery(
+  formData: FormData,
+  items: Array<{ product: string; qty_kg: number; unit_price: number; amount: number }>
+) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+
+  const totalAmount = items.reduce((s, it) => s + it.amount, 0);
+  const db = createServerClient();
+
+  const customerName = formData.get("customer_name") as string;
+  const customerId   = (formData.get("customer_id") as string) || null;
+
+  const { error } = await db.from("deliveries").insert({
+    delivery_date: formData.get("delivery_date"),
+    customer_name: customerName,
+    customer_id:   customerId || undefined,
+    dept:          session.dept ?? "배송팀",
+    items,
+    total_amount:  totalAmount,
+    status:        "shipped",
+    driver:        (formData.get("driver") as string) || null,
+    notes:         (formData.get("notes") as string) || null,
+  });
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+  return { success: true };
+}
+
+// ── COO 코멘트 저장 ──────────────────────────────────────────
+export async function saveCooComment(reportId: string, comment: string) {
+  const session = await getSession();
+  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+
+  const db = createServerClient();
+  const { error } = await db
+    .from("dept_reports")
+    .update({
+      coo_comment:    comment,
+      coo_id:         session.id,
+      coo_updated_at: new Date().toISOString(),
+      status:         "reviewed",
+    })
+    .eq("id", reportId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/coo");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
