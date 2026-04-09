@@ -8,6 +8,7 @@ import HygieneCheckDetail from "@/components/HygieneCheckDetail";
 import CooCommentBox from "@/components/CooCommentBox";
 import { createServerClient } from "@/lib/supabase";
 import { alerts } from "@/lib/sampleData";
+import InventorySection from "@/components/InventorySection";
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
@@ -66,6 +67,32 @@ export default async function COOPage() {
       .eq("status", "pending")
       .order("request_date", { ascending: false }),
   ]);
+
+  // 창고별 최신 날짜 재고 (테이블 없으면 빈 배열)
+  let inventoryRows: {
+    id: string; inventory_date: string; location: string;
+    product_name: string; unit: string; prev_stock: number;
+    incoming_qty: number; outgoing_qty: number;
+    recorded_by: string | null; notes: string | null;
+  }[] = [];
+  try {
+    const { data: latestDateRow } = await db
+      .from("container_inventory")
+      .select("inventory_date")
+      .order("inventory_date", { ascending: false })
+      .limit(1)
+      .single();
+    if (latestDateRow) {
+      const { data: invData } = await db
+        .from("container_inventory")
+        .select("id, inventory_date, location, product_name, unit, prev_stock, incoming_qty, outgoing_qty, recorded_by, notes")
+        .eq("inventory_date", latestDateRow.inventory_date)
+        .order("location");
+      inventoryRows = invData ?? [];
+    }
+  } catch {
+    // 테이블 미존재 시 무시
+  }
 
   // 부서별 최신 보고서만 추출
   const latestByDept = new Map<string, typeof deptReports extends (infer T)[] | null ? T : never>();
@@ -302,6 +329,21 @@ export default async function COOPage() {
         <section>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">긴급 알림</h2>
           <AlertPanel alerts={alerts} />
+        </section>
+
+        {/* 창고별 재고 현황 */}
+        <section>
+          <div className="flex items-center gap-3 mb-3">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+              📦 창고별 재고 현황
+            </h2>
+            {inventoryRows.length > 0 && (
+              <span className="text-xs text-gray-400">
+                {inventoryRows.length}개 품목 · 클릭으로 창고 필터
+              </span>
+            )}
+          </div>
+          <InventorySection rows={inventoryRows} />
         </section>
 
         {/* 비용 승인 */}
