@@ -17,20 +17,30 @@ interface DeliveryItem {
   amount: number;
 }
 
+interface ProductOption {
+  name: string;
+  unit: string;
+  sale_price: number;
+}
+
 interface Props {
   customers: Customer[];
   onSuccess: () => void;
   onError: (msg: string) => void;
+  products?: ProductOption[];
 }
 
-const PRODUCT_OPTIONS = [
+const FALLBACK_PRODUCT_OPTIONS = [
   "돼지 머리", "돼지 뒷고기", "돼지 족발", "돼지 내장", "돼지 뼈",
   "돼지 껍데기", "육수 (포장)", "국물 베이스", "순대 원료", "혼합 부산물",
 ];
 
 const EMPTY_ITEM: DeliveryItem = { product: "", isCustom: false, qty_kg: 0, unit_price: 0, amount: 0 };
 
-export default function DeliveryForm({ customers, onSuccess, onError }: Props) {
+export default function DeliveryForm({ customers, onSuccess, onError, products }: Props) {
+  const PRODUCT_OPTIONS = products && products.length > 0
+    ? products.map((p) => p.name)
+    : FALLBACK_PRODUCT_OPTIONS;
   const [items, setItems] = useState<DeliveryItem[]>([{ ...EMPTY_ITEM }]);
   const [loading, setLoading] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);

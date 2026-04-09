@@ -178,6 +178,7 @@ const deptData: Record<string, { kpis: KPI[]; todos: Todo[] }> = {
 };
 
 // ── 부서별 표시 섹션 설정 ────────────────────────────────────
+const SHOW_PRODUCT_MASTER = new Set(["재고팀", "회계팀", "개발팀"]);
 const SHOW_WORK_ORDER  = new Set(["개발팀", "가공팀"]);   // 업무지시서
 const SHOW_HEAD_WORK   = new Set(["생산팀"]);              // 두/내장 작업일지
 const SHOW_LIVESTOCK   = new Set(["생산팀"]);              // 농협 입고두수
@@ -212,6 +213,7 @@ export default async function TeamPage() {
   const thisMonth = today.slice(0, 7);
   const monthStart = `${thisMonth}-01`;
 
+  const showProductMaster = SHOW_PRODUCT_MASTER.has(dept);
   const showProdLog   = SHOW_PROD_LOG.has(dept);
   const showHygiene   = SHOW_HYGIENE.has(dept);
   const showClaims    = SHOW_CLAIMS.has(dept);
@@ -343,6 +345,25 @@ export default async function TeamPage() {
           </div>
           <span className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full font-semibold">팀장 전용</span>
         </div>
+
+        {/* 품목 마스터 링크 (재고팀 / 회계팀 / 개발팀) */}
+        {showProductMaster && (
+          <section>
+            <a
+              href="/products"
+              className="flex items-center justify-between bg-white rounded-xl border border-[#1F3864]/20 px-5 py-3.5 hover:bg-[#1F3864]/5 transition-colors group"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl">📦</span>
+                <div>
+                  <div className="text-sm font-semibold text-[#1F3864]">품목 마스터 관리</div>
+                  <div className="text-xs text-gray-400">전체 품목 조회·편집·엑셀 업/다운로드</div>
+                </div>
+              </div>
+              <span className="text-[#1F3864] group-hover:translate-x-0.5 transition-transform text-sm">→</span>
+            </a>
+          </section>
+        )}
 
         {/* ① 주간 보고서 */}
         <section>

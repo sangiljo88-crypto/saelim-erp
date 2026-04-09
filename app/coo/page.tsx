@@ -76,6 +76,16 @@ export default async function COOPage() {
           <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full font-semibold">COO 전용</span>
         </div>
 
+        {/* 바로가기 링크 */}
+        <div className="flex gap-3 flex-wrap">
+          <a
+            href="/products"
+            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
+          >
+            <span>📦</span> 품목 마스터
+          </a>
+        </div>
+
         {/* 요약 카드 */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label="비용 결재 대기" value={`${pendingApprovals}건`} sub="승인 필요" color="text-amber-600" />
