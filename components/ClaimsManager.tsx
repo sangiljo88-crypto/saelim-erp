@@ -17,6 +17,17 @@ interface Claim {
 }
 
 type FilterStatus = "all" | "pending" | "in_progress" | "resolved";
+type SortKey = "created_at" | "claim_date" | "client_name" | "status";
+type SortDir = "asc" | "desc";
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "created_at",  label: "접수일시" },
+  { key: "claim_date",  label: "클레임 날짜" },
+  { key: "client_name", label: "거래처명" },
+  { key: "status",      label: "상태" },
+];
+
+const STATUS_ORDER = { pending: 0, in_progress: 1, resolved: 2 };
 
 const STATUS_META = {
   pending:     { label: "미처리",  color: "bg-red-100 text-red-700",      dot: "bg-red-500" },
@@ -32,13 +43,36 @@ const CLAIM_TYPE_ICON: Record<string, string> = {
 };
 
 export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[] }) {
-  const [claims, setClaims]           = useState<Claim[]>(initialClaims);
-  const [filter, setFilter]           = useState<FilterStatus>("all");
-  const [loading, setLoading]         = useState<string | null>(null);
-  const [errors, setErrors]           = useState<Record<string, string>>({});
-  const [expanded, setExpanded]       = useState<string | null>(null);
+  const [claims, setClaims]     = useState<Claim[]>(initialClaims);
+  const [filter, setFilter]     = useState<FilterStatus>("all");
+  const [sortKey, setSortKey]   = useState<SortKey>("created_at");
+  const [sortDir, setSortDir]   = useState<SortDir>("desc");
+  const [loading, setLoading]   = useState<string | null>(null);
+  const [errors, setErrors]     = useState<Record<string, string>>({});
+  const [expanded, setExpanded] = useState<string | null>(null);
 
-  const filtered = filter === "all" ? claims : claims.filter((c) => c.status === filter);
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "client_name" ? "asc" : "desc");
+    }
+  }
+
+  const filtered = (filter === "all" ? claims : claims.filter((c) => c.status === filter))
+    .slice()
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "status") {
+        cmp = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
+      } else if (sortKey === "client_name") {
+        cmp = a.client_name.localeCompare(b.client_name, "ko");
+      } else {
+        cmp = a[sortKey] < b[sortKey] ? -1 : a[sortKey] > b[sortKey] ? 1 : 0;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
 
   const counts = {
     all:         claims.length,
@@ -90,6 +124,30 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
               <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${active ? "bg-white/20 text-white" : meta.color}`}>
                 {counts[s]}
               </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 정렬 */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-gray-400 shrink-0">정렬:</span>
+        {SORT_OPTIONS.map(({ key, label }) => {
+          const active = sortKey === key;
+          return (
+            <button
+              key={key}
+              onClick={() => handleSort(key)}
+              className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
+                active
+                  ? "bg-[#1F3864] text-white"
+                  : "bg-white border border-gray-200 text-gray-600 hover:border-[#1F3864]"
+              }`}
+            >
+              {label}
+              {active && (
+                <span className="text-[10px]">{sortDir === "asc" ? "↑" : "↓"}</span>
+              )}
             </button>
           );
         })}
