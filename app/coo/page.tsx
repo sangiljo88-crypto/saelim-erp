@@ -35,15 +35,30 @@ export default async function COOPage() {
     { count: todayProdCount },
     { data: todayHygiene },
     { data: deptReports },
+    { data: todayDeliveries },
+    { data: todayProdLogs },
+    { data: todayIntake },
   ] = await Promise.all([
     db.from("action_items").select("id, title, dept, deadline, status").order("deadline"),
     db.from("claims").select("*", { count: "exact", head: true }).eq("status", "pending"),
     db.from("production_logs").select("*", { count: "exact", head: true }).eq("work_date", today),
     db.from("hygiene_checks").select("worker_name, dept, all_passed, items").eq("check_date", today),
-    // 각 부서의 가장 최근 주간 보고서 1건씩
     db.from("dept_reports")
       .select("id, dept, report_date, manager_name, rag_status, issue, detail, next_action, status, coo_comment, coo_updated_at")
       .order("report_date", { ascending: false }),
+    // 오늘 납품전표
+    db.from("deliveries")
+      .select("id, delivery_date, customer_name, total_amount, status, driver, items")
+      .eq("delivery_date", today)
+      .order("created_at", { ascending: false }),
+    // 오늘 생산일지
+    db.from("production_logs")
+      .select("worker_name, dept, product_name, input_qty, output_qty, issue_note")
+      .eq("work_date", today),
+    // 오늘 농협 입고
+    db.from("livestock_intake")
+      .select("intake_date, nh_actual, manager_name")
+      .eq("intake_date", today),
   ]);
 
   // 부서별 최신 보고서만 추출
@@ -108,6 +123,106 @@ export default async function COOPage() {
             color="text-[#1F3864]"
           />
         </div>
+
+        {/* ─── 오늘의 운영 현황 ────────────────────────────────── */}
+        <section>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            📅 오늘의 운영 현황 <span className="text-gray-400 font-normal normal-case ml-1">({today})</span>
+          </h2>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+            {/* 오늘 납품 현황 */}
+            <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold text-gray-700">🚚 오늘 납품 현황</span>
+                <span className="text-xs text-gray-400">{(todayDeliveries ?? []).length}건</span>
+              </div>
+              {(todayDeliveries ?? []).length === 0 ? (
+                <div className="text-xs text-gray-400 py-4 text-center">오늘 납품전표 없음</div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {(todayDeliveries ?? []).map((d) => {
+                    const statusMap: Record<string, { label: string; color: string }> = {
+                      shipped:   { label: "배송중",   color: "bg-amber-100 text-amber-700" },
+                      delivered: { label: "배송완료", color: "bg-emerald-100 text-emerald-700" },
+                      pending:   { label: "대기",     color: "bg-gray-100 text-gray-600" },
+                      cancelled: { label: "취소",     color: "bg-red-100 text-red-600" },
+                    };
+                    const st = statusMap[d.status] ?? { label: d.status, color: "bg-gray-100 text-gray-600" };
+                    const itemCount = Array.isArray(d.items) ? d.items.length : 0;
+                    return (
+                      <div key={d.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-lg">🚛</span>
+                          <div>
+                            <div className="text-sm font-semibold text-gray-800">{d.customer_name}</div>
+                            <div className="text-xs text-gray-400">
+                              {d.driver ? `기사: ${d.driver}` : "기사 미지정"} · 품목 {itemCount}종
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
+                          <span className="text-sm font-bold text-[#1F3864]">
+                            {d.total_amount ? `${(d.total_amount / 10000).toFixed(0)}만` : "-"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 오늘 생산 + 입고 */}
+            <div className="flex flex-col gap-3">
+              {/* 오늘 생산 */}
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-gray-700">🏭 오늘 생산</span>
+                  <span className="text-xs text-gray-400">{(todayProdLogs ?? []).length}건</span>
+                </div>
+                {(todayProdLogs ?? []).length === 0 ? (
+                  <div className="text-xs text-gray-400 py-2 text-center">생산일지 없음</div>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {(todayProdLogs ?? []).map((p, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs">
+                        <div>
+                          <span className="font-medium text-gray-700">{p.product_name}</span>
+                          <span className="text-gray-400 ml-1">({p.worker_name})</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-gray-600">{(p.output_qty ?? 0).toLocaleString()}kg</span>
+                          {p.issue_note && <div className="text-red-500 text-[10px]">⚠ {p.issue_note}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 오늘 농협 입고 */}
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-gray-700">🐷 오늘 입고</span>
+                </div>
+                {(todayIntake ?? []).length === 0 ? (
+                  <div className="text-xs text-gray-400 py-2 text-center">농협 입고 기록 없음</div>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {(todayIntake ?? []).map((it, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600">{it.manager_name ?? "담당자"}</span>
+                        <span className="font-bold text-[#1F3864]">{it.nh_actual ?? 0}두 입고</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* ─── 부서별 주간 보고 + COO 코멘트 ──────────────────── */}
         <section>
