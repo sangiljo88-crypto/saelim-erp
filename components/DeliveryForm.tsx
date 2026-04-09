@@ -11,6 +11,7 @@ interface Customer {
 
 interface DeliveryItem {
   product: string;
+  isCustom: boolean;
   qty_kg: number;
   unit_price: number;
   amount: number;
@@ -27,7 +28,7 @@ const PRODUCT_OPTIONS = [
   "돼지 껍데기", "육수 (포장)", "국물 베이스", "순대 원료", "혼합 부산물",
 ];
 
-const EMPTY_ITEM: DeliveryItem = { product: "", qty_kg: 0, unit_price: 0, amount: 0 };
+const EMPTY_ITEM: DeliveryItem = { product: "", isCustom: false, qty_kg: 0, unit_price: 0, amount: 0 };
 
 export default function DeliveryForm({ customers, onSuccess, onError }: Props) {
   const [items, setItems] = useState<DeliveryItem[]>([{ ...EMPTY_ITEM }]);
@@ -139,22 +140,45 @@ export default function DeliveryForm({ customers, onSuccess, onError }: Props) {
         {items.map((item, idx) => (
           <div key={idx} className="grid gap-2 items-center"
             style={{ gridTemplateColumns: "2fr 1fr 1.2fr 1.2fr auto" }}>
-            <select
-              value={item.product}
-              onChange={(e) => updateItem(idx, "product", e.target.value)}
-              className="rounded-lg border border-gray-200 px-2 py-2 text-xs focus:border-[#1F3864] outline-none bg-white truncate">
-              <option value="">품목 선택</option>
-              {PRODUCT_OPTIONS.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-              <option value="__custom">직접 입력</option>
-            </select>
-
-            {item.product === "__custom" ? (
-              <input type="text" placeholder="품목명"
-                className="rounded-lg border border-gray-200 px-2 py-2 text-xs focus:border-[#1F3864] outline-none"
-                onChange={(e) => updateItem(idx, "product", e.target.value)} />
-            ) : null}
+            {item.isCustom ? (
+              <div className="flex gap-1">
+                <input
+                  type="text"
+                  placeholder="품목명 입력"
+                  value={item.product}
+                  autoFocus
+                  onChange={(e) => updateItem(idx, "product", e.target.value)}
+                  className="flex-1 rounded-lg border border-[#1F3864]/40 px-2 py-2 text-xs focus:border-[#1F3864] outline-none" />
+                <button type="button" onClick={() => {
+                  setItems((prev) => {
+                    const next = [...prev];
+                    next[idx] = { ...next[idx], isCustom: false, product: "" };
+                    return next;
+                  });
+                }} className="text-gray-300 hover:text-gray-500 text-xs px-1">↩</button>
+              </div>
+            ) : (
+              <select
+                value={item.product}
+                onChange={(e) => {
+                  if (e.target.value === "__custom") {
+                    setItems((prev) => {
+                      const next = [...prev];
+                      next[idx] = { ...next[idx], isCustom: true, product: "" };
+                      return next;
+                    });
+                  } else {
+                    updateItem(idx, "product", e.target.value);
+                  }
+                }}
+                className="rounded-lg border border-gray-200 px-2 py-2 text-xs focus:border-[#1F3864] outline-none bg-white truncate">
+                <option value="">품목 선택</option>
+                {PRODUCT_OPTIONS.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+                <option value="__custom">✏️ 직접 입력</option>
+              </select>
+            )}
 
             <input
               type="number"
