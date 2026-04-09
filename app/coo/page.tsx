@@ -8,7 +8,6 @@ import HygieneCheckDetail from "@/components/HygieneCheckDetail";
 import CooCommentBox from "@/components/CooCommentBox";
 import { createServerClient } from "@/lib/supabase";
 import { alerts } from "@/lib/sampleData";
-import InventorySection from "@/components/InventorySection";
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
@@ -109,6 +108,10 @@ export default async function COOPage() {
   const pendingApprovals = (costApprovals ?? []).length;
   const reportSubmitted = latestByDept.size;
   const pendingReviews = [...latestByDept.values()].filter((r) => r.status === "submitted").length;
+  const lowStockCount = inventoryRows.filter((r) => {
+    const curr = r.prev_stock + r.incoming_qty - r.outgoing_qty;
+    return curr < 100;
+  }).length;
 
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
@@ -143,6 +146,17 @@ export default async function COOPage() {
               </span>
             ) : null}
           </a>
+          <a
+            href="/inventory"
+            className="flex items-center gap-2 bg-white rounded-xl border border-blue-200 px-4 py-2.5 hover:bg-blue-50 transition-colors text-sm font-medium text-blue-700"
+          >
+            <span>🏭</span> 창고 재고
+            {lowStockCount > 0 && (
+              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">
+                부족 {lowStockCount}
+              </span>
+            )}
+          </a>
         </div>
 
         {/* 요약 카드 */}
@@ -161,10 +175,10 @@ export default async function COOPage() {
             color={(pendingClaimsCount ?? 0) > 0 ? "text-red-600" : "text-emerald-600"}
           />
           <StatCard
-            label="오늘 생산일지"
-            value={`${todayProdCount ?? 0}건`}
-            sub={`위생점검 ${todayHygiene?.length ?? 0}건`}
-            color="text-[#1F3864]"
+            label="재고 부족 품목"
+            value={inventoryRows.length === 0 ? "-" : `${lowStockCount}종`}
+            sub={inventoryRows.length === 0 ? "창고 재고 미등록" : `전체 ${inventoryRows.length}개 품목`}
+            color={lowStockCount > 0 ? "text-amber-600" : "text-emerald-600"}
           />
         </div>
 
@@ -329,21 +343,6 @@ export default async function COOPage() {
         <section>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">긴급 알림</h2>
           <AlertPanel alerts={alerts} />
-        </section>
-
-        {/* 창고별 재고 현황 */}
-        <section>
-          <div className="flex items-center gap-3 mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-              📦 창고별 재고 현황
-            </h2>
-            {inventoryRows.length > 0 && (
-              <span className="text-xs text-gray-400">
-                {inventoryRows.length}개 품목 · 클릭으로 창고 필터
-              </span>
-            )}
-          </div>
-          <InventorySection rows={inventoryRows} />
         </section>
 
         {/* 비용 승인 */}
