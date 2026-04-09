@@ -7,30 +7,25 @@ interface ApprovalItem {
   id: string;
   title: string;
   dept: string;
-  requestedBy: string;
-  date: string;
+  requested_by: string;
+  request_date: string;
   amount: number;
+  status: string;
 }
-
-const INITIAL_ITEMS: ApprovalItem[] = [
-  { id: "1", title: "포장재 긴급 발주", dept: "생산팀", requestedBy: "생산팀장", date: "2026-04-07", amount: 12_000_000 },
-  { id: "2", title: "CS팀 외주 용역 계약", dept: "CS팀", requestedBy: "CS팀장", date: "2026-04-06", amount: 8_000_000 },
-  { id: "3", title: "온라인 광고비 증액", dept: "온라인팀", requestedBy: "온라인팀장", date: "2026-04-05", amount: 6_000_000 },
-];
 
 type ItemStatus = "pending" | "approved" | "rejected";
 
-export default function CostApprovalSection() {
+export default function CostApprovalSection({ items }: { items: ApprovalItem[] }) {
   const [statuses, setStatuses] = useState<Record<string, ItemStatus>>(
-    Object.fromEntries(INITIAL_ITEMS.map((i) => [i.id, "pending"]))
+    Object.fromEntries(items.map((i) => [i.id, "pending"]))
   );
   const [comments, setComments] = useState<Record<string, string>>(
-    Object.fromEntries(INITIAL_ITEMS.map((i) => [i.id, ""]))
+    Object.fromEntries(items.map((i) => [i.id, ""]))
   );
   const [loading, setLoading] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const pendingCount = Object.values(statuses).filter((s) => s === "pending").length;
+  const pendingCount = items.filter((i) => statuses[i.id] === "pending").length;
 
   async function handleAction(id: string, action: "approved" | "rejected") {
     setLoading(id + action);
@@ -65,8 +60,13 @@ export default function CostApprovalSection() {
         )}
       </div>
 
+      {items.length === 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-sm text-gray-400">
+          승인 대기 중인 비용 항목이 없습니다
+        </div>
+      )}
       <div className="flex flex-col gap-2">
-        {INITIAL_ITEMS.map((item) => {
+        {items.map((item) => {
           const status = statuses[item.id];
           const isApproved = status === "approved";
           const isRejected = status === "rejected";
@@ -97,7 +97,7 @@ export default function CostApprovalSection() {
                     </span>
                   </div>
                   <div className="text-xs text-gray-400">
-                    {item.dept} · {item.requestedBy} · {item.date}
+                    {item.dept} · {item.requested_by} · {item.request_date}
                   </div>
                 </div>
 

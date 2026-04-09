@@ -38,6 +38,7 @@ export default async function COOPage() {
     { data: todayDeliveries },
     { data: todayProdLogs },
     { data: todayIntake },
+    { data: costApprovals },
   ] = await Promise.all([
     db.from("action_items").select("id, title, dept, deadline, status").order("deadline"),
     db.from("claims").select("*", { count: "exact", head: true }).eq("status", "pending"),
@@ -59,6 +60,11 @@ export default async function COOPage() {
     db.from("livestock_intake")
       .select("intake_date, nh_actual, manager_name")
       .eq("intake_date", today),
+    // 비용 승인 대기
+    db.from("cost_approvals")
+      .select("id, title, dept, requested_by, request_date, amount, status")
+      .eq("status", "pending")
+      .order("request_date", { ascending: false }),
   ]);
 
   // 부서별 최신 보고서만 추출
@@ -73,7 +79,7 @@ export default async function COOPage() {
   }));
 
   const delayedActions = actionItems.filter((a) => a.status === "지연").length;
-  const pendingApprovals = 3;
+  const pendingApprovals = (costApprovals ?? []).length;
   const reportSubmitted = latestByDept.size;
   const pendingReviews = [...latestByDept.values()].filter((r) => r.status === "submitted").length;
 
@@ -288,7 +294,7 @@ export default async function COOPage() {
         </section>
 
         {/* 비용 승인 */}
-        <CostApprovalSection />
+        <CostApprovalSection items={costApprovals ?? []} />
 
         {/* Action Items */}
         <section>
