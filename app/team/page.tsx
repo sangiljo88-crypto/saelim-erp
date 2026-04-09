@@ -260,7 +260,7 @@ export default async function TeamPage() {
     db.from("dept_reports").select("id, report_date, rag_status, issue, detail, next_action, status, coo_comment, coo_updated_at")
       .eq("dept", dept).order("report_date", { ascending: false }).limit(1),
     showHeadWork
-      ? db.from("head_work_logs").select("work_date, head_received, head_items, innard_items, notes")
+      ? db.from("head_work_logs").select("work_date, head_received, head_items, innard_items, notes, manager_name")
           .order("work_date", { ascending: false }).limit(3)
       : Promise.resolve({ data: null }),
     showLivestock
@@ -403,7 +403,7 @@ export default async function TeamPage() {
                   <div key={hw.work_date} className="flex items-center justify-between px-4 py-3 border-b border-gray-100 last:border-0 text-xs">
                     <span className="font-medium text-gray-700">{hw.work_date}</span>
                     <span className="text-amber-600 font-bold">{hw.head_received}두 입고</span>
-                    <span className="text-gray-400">{hw.manager}</span>
+                    <span className="text-gray-400">{hw.manager_name ?? "—"}</span>
                   </div>
                 ))}
               </div>

@@ -92,7 +92,7 @@ export default function HeadWorkLogForm() {
     </div>
   );
 
-  const DIST_COLS = [
+  const DIST_COLS: { key: keyof PartItem; label: string; yellow?: boolean }[] = [
     { key: "total",    label: "총생산량", yellow: true },
     { key: "gyusan",   label: "군산식당" },
     { key: "road",     label: "로드업체" },
@@ -100,7 +100,7 @@ export default function HeadWorkLogForm() {
     { key: "jasuk",    label: "자숙" },
     { key: "skin",     label: "스킨작업" },
     { key: "frozen",   label: "냉동입고" },
-  ] as const;
+  ];
 
   function renderTable(items: PartItem[], update: (i: number, f: keyof PartItem, v: number) => void, title: string) {
     return (
