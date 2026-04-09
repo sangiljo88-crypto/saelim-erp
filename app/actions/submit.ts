@@ -323,7 +323,7 @@ export async function submitDelivery(
   items: Array<{ product: string; qty_kg: number; unit_price: number; amount: number }>
 ) {
   const session = await getSession();
-  if (!session) throw new Error("로그인 필요");
+  if (!session) return { success: false, error: "로그인 필요" };
 
   const totalAmount = items.reduce((s, it) => s + it.amount, 0);
   const db = createServerClient();
@@ -343,8 +343,15 @@ export async function submitDelivery(
     notes:         (formData.get("notes") as string) || null,
   });
 
-  if (error) throw new Error(error.message);
-  revalidatePath("/team");
+  if (error) {
+    // deliveries 테이블 미생성 안내
+    const msg = error.message.includes("does not exist")
+      ? "deliveries 테이블이 없습니다. Supabase에서 schema_v4.sql을 실행해주세요."
+      : error.message;
+    return { success: false, error: msg };
+  }
+
+  try { revalidatePath("/team"); } catch {}
   return { success: true };
 }
 

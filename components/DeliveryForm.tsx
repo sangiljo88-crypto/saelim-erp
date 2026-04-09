@@ -73,10 +73,14 @@ export default function DeliveryForm({ customers, onSuccess, onError }: Props) {
     setLoading(true);
     try {
       const fd = new FormData(formRef.current!);
-      await submitDelivery(fd, validItems);
-      onSuccess();
+      const result = await submitDelivery(fd, validItems);
+      if (!result.success) {
+        onError(result.error ?? "저장 중 오류가 발생했습니다.");
+      } else {
+        onSuccess();
+      }
     } catch (err) {
-      onError((err as Error).message);
+      onError((err as Error).message ?? "오류가 발생했습니다.");
     } finally {
       setLoading(false);
     }
