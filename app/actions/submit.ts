@@ -410,6 +410,25 @@ export async function saveCooComment(reportId: string, comment: string) {
   return { success: true };
 }
 
+// ── 냉동 재고 단건 수정 (COO 현장 수정) ────────────────────────
+export async function updateFrozenInventoryRow(
+  id: string,
+  updates: { prev_stock: number; usage_qty: number; incoming_qty: number; outgoing_qty: number; current_stock: number }
+) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const roleLabel: Record<string, string> = {
+    coo: "COO", ceo: "대표", manager: "팀장", worker: "직원",
+  };
+  const modified_by = `${session.name} (${roleLabel[session.role] ?? session.role})`;
+  const { error } = await db.from("frozen_inventory").update({ ...updates, modified_by }).eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/inventory");
+  revalidatePath("/coo");
+  return { success: true };
+}
+
 // ── 냉동·냉장·컨테이너 재고 ──────────────────────────────────
 export async function saveFrozenInventory(
   inventoryDate: string,

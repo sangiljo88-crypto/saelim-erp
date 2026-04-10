@@ -2,6 +2,7 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { createServerClient } from "@/lib/supabase";
+import FrozenInventoryRowEditor from "@/components/FrozenInventoryRowEditor";
 
 type FrozenRow = {
   id: string;
@@ -15,6 +16,7 @@ type FrozenRow = {
   incoming_qty: number;
   outgoing_qty: number;
   current_stock: number;
+  modified_by?: string | null;
 };
 
 export default async function InventoryPage() {
@@ -38,7 +40,7 @@ export default async function InventoryPage() {
       latestDate = latest.inventory_date;
       const { data } = await db
         .from("frozen_inventory")
-        .select("id, inventory_date, section, side, product_name, unit, prev_stock, usage_qty, incoming_qty, outgoing_qty, current_stock")
+        .select("id, inventory_date, section, side, product_name, unit, prev_stock, usage_qty, incoming_qty, outgoing_qty, current_stock, modified_by")
         .eq("inventory_date", latest.inventory_date)
         .order("section")
         .order("side")
@@ -122,25 +124,12 @@ export default async function InventoryPage() {
                                 <th className="text-center px-2 py-2 text-gray-400 font-medium">입고량</th>
                                 <th className="text-center px-2 py-2 text-gray-400 font-medium">출고량</th>
                                 <th className="text-center px-2 py-2 text-emerald-600 font-semibold">현재고</th>
+                              <th className="text-right px-2 py-2 text-gray-400 font-medium">수정</th>
                               </tr>
                             </thead>
                             <tbody>
                               {g.data.map((r) => (
-                                <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50">
-                                  <td className="px-3 py-2 font-medium text-gray-800">{r.product_name}</td>
-                                  <td className="px-2 py-2 text-center text-gray-400">{r.unit}</td>
-                                  <td className="px-2 py-2 text-center text-gray-600">{r.prev_stock}</td>
-                                  <td className="px-2 py-2 text-center text-orange-500">{r.usage_qty || "-"}</td>
-                                  <td className="px-2 py-2 text-center text-blue-500">{r.incoming_qty || "-"}</td>
-                                  <td className="px-2 py-2 text-center text-red-400">{r.outgoing_qty || "-"}</td>
-                                  <td className={`px-2 py-2 text-center font-bold ${
-                                    (r.current_stock ?? 0) < 50 && (r.current_stock ?? 0) > 0
-                                      ? "text-amber-600"
-                                      : "text-emerald-600"
-                                  }`}>
-                                    {r.current_stock}
-                                  </td>
-                                </tr>
+                                <FrozenInventoryRowEditor key={r.id} row={r} />
                               ))}
                             </tbody>
                           </table>
