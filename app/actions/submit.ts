@@ -252,15 +252,19 @@ export async function submitProductionPlan(
   const session = await getSession();
   if (!session) throw new Error("로그인 필요");
   const db = createServerClient();
+  const dept = session.dept ?? "생산팀";
   const { error } = await db.from("production_plans").upsert({
     plan_date:    planDate,
+    dept,
     manager:      session.name,
     today_plans:  todayPlans,
     next_plans:   nextPlans,
     notes,
-  }, { onConflict: "plan_date" });
+  }, { onConflict: "plan_date,dept" });
   if (error) throw new Error(error.message);
   revalidatePath("/team");
+  revalidatePath("/dashboard");
+  revalidatePath("/coo");
   return { success: true };
 }
 
