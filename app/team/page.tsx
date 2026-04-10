@@ -244,6 +244,7 @@ export default async function TeamPage() {
     inventoryRes,
     customersRes,
     deliveriesRes,
+    workersRes,
   ] = await Promise.all([
     showProdLog
       ? db.from("production_logs").select("id, worker_name, product_name, output_qty, yield_rate, created_at")
@@ -282,6 +283,9 @@ export default async function TeamPage() {
       ? db.from("production_plans").select("plan_date, manager, today_plans, next_plans, notes")
           .order("plan_date", { ascending: false }).limit(2)
       : Promise.resolve({ data: null }),
+    showPlan
+      ? db.from("members").select("name").eq("dept", dept).eq("role", "worker").eq("active", true).order("name")
+      : Promise.resolve({ data: null }),
     showPatrol
       ? db.from("quality_patrol").select("patrol_date, patrol_time, inspector, areas, issues, overall_status")
           .order("patrol_date", { ascending: false }).limit(5)
@@ -314,6 +318,7 @@ export default async function TeamPage() {
   const todayInventory = inventoryRes.data;
   const customerList   = customersRes.data;
   const recentDeliveries = deliveriesRes.data;
+  const teamWorkers = (workersRes.data ?? []).map((w: { name: string }) => w.name);
 
   const avgYield = monthProdLogs && monthProdLogs.length > 0
     ? (monthProdLogs.reduce((s, r) => s + (r.yield_rate ?? 0), 0) / monthProdLogs.length).toFixed(1)
@@ -476,7 +481,7 @@ export default async function TeamPage() {
         {showPlan && (
           <section>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">당일 / 익일 생산계획</h2>
-            <ProductionPlanForm />
+            <ProductionPlanForm dept={dept} workers={teamWorkers} />
             {recentPlans && recentPlans.length > 0 && (
               <div className="mt-3 bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-4 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100 bg-gray-50">최근 생산계획</div>
