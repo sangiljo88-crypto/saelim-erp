@@ -510,7 +510,7 @@ export default async function TeamPage() {
                       <span className="text-xs text-gray-400">{p.manager}</span>
                     </div>
                     <div className="text-xs text-gray-500">
-                      당일: {(p.today_plans as Array<{team: string; product: string; target: number}>).map((pl) => `${pl.team} ${pl.product}(${pl.target})`).join(" · ")}
+                      당일: {(p.today_plans as Array<{task: string; target_count: string; work_hours: string}>).filter((pl) => pl.task).map((pl) => `${pl.task}${pl.target_count ? `(${pl.target_count}개)` : ""}`).join(" · ")}
                     </div>
                   </div>
                 ))}
