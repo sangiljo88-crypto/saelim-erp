@@ -285,13 +285,19 @@ export async function saveCostApproval(itemId: string, status: "approved" | "rej
   return { success: true };
 }
 
-// ── 클레임 상태 변경 (COO) ────────────────────────────────────
+// ── 클레임 상태 변경 (COO + 관련 팀장) ──────────────────────
+const CLAIM_ALLOWED_DEPTS = new Set(["CS팀", "품질팀", "배송팀"]);
+
 export async function updateClaimStatus(
   claimId: string,
   status: "pending" | "in_progress" | "resolved"
 ) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (!session) return { error: "로그인 필요" };
+
+  const isCoo     = session.role === "coo";
+  const isManager = session.role === "manager" && CLAIM_ALLOWED_DEPTS.has(session.dept ?? "");
+  if (!isCoo && !isManager) return { error: "권한 없음 (COO 또는 CS·품질·배송팀장)" };
 
   const db = createServerClient();
   const { error } = await db
@@ -302,6 +308,7 @@ export async function updateClaimStatus(
   if (error) return { error: error.message };
   revalidatePath("/claims");
   revalidatePath("/coo");
+  revalidatePath("/team");
   return { success: true };
 }
 

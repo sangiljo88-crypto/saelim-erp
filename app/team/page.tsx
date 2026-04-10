@@ -14,6 +14,7 @@ import AuditChecklistForm from "@/components/AuditChecklistForm";
 import ProductionPlanForm from "@/components/ProductionPlanForm";
 import { createServerClient } from "@/lib/supabase";
 import CustomerListView from "@/components/CustomerListView";
+import TeamClaimsSection from "@/components/TeamClaimsSection";
 
 type KPI = { label: string; value: string; target: string; ok: boolean };
 type Todo = { text: string; defaultDone?: boolean };
@@ -256,7 +257,7 @@ export default async function TeamPage() {
           .eq("dept", dept).eq("check_date", today).order("created_at", { ascending: false })
       : Promise.resolve({ data: null }),
     showClaims
-      ? db.from("claims").select("id, client_name, claim_type, status, created_at")
+      ? db.from("claims").select("id, client_name, claim_type, claim_date, content, product_names, status, created_at")
           .eq("dept", dept).gte("claim_date", monthStart).order("created_at", { ascending: false })
       : Promise.resolve({ data: null }),
     db.from("dept_reports").select("id, report_date, rag_status, issue, detail, next_action, status, coo_comment, coo_updated_at")
@@ -634,30 +635,7 @@ export default async function TeamPage() {
                 <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">{claimCount}건</span>
               )}
             </div>
-            {monthClaims && monthClaims.length > 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                {monthClaims.map((c, i) => (
-                  <div key={c.id} className={`flex items-center gap-4 px-5 py-3.5 ${i > 0 ? "border-t border-gray-100" : ""}`}>
-                    <span className="text-base">📢</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-800">{c.client_name}</div>
-                      <div className="text-xs text-gray-400">{c.claim_type}</div>
-                    </div>
-                    <span className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                      c.status === "resolved" ? "bg-emerald-100 text-emerald-700"
-                      : c.status === "in_progress" ? "bg-blue-100 text-blue-700"
-                      : "bg-amber-100 text-amber-700"
-                    }`}>
-                      {c.status === "resolved" ? "해결완료" : c.status === "in_progress" ? "처리중" : "접수됨"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-white rounded-xl border border-gray-200 p-5 text-center">
-                <div className="text-sm text-gray-400">이번 달 접수된 클레임 없음</div>
-              </div>
-            )}
+            <TeamClaimsSection initialClaims={(monthClaims ?? []) as Parameters<typeof TeamClaimsSection>[0]["initialClaims"]} />
           </section>
         )}
 
