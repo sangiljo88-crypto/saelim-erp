@@ -409,3 +409,26 @@ export async function saveCooComment(reportId: string, comment: string) {
   revalidatePath("/dashboard");
   return { success: true };
 }
+
+// ── 냉동·냉장·컨테이너 재고 ──────────────────────────────────
+export async function saveFrozenInventory(
+  inventoryDate: string,
+  items: {
+    section: string; side: string; product_name: string; unit: string;
+    prev_stock: number; usage_qty: number; incoming_qty: number;
+    outgoing_qty: number; current_stock: number;
+  }[]
+) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const rows = items.map((item) => ({ inventory_date: inventoryDate, ...item }));
+  const { error } = await db.from("frozen_inventory").upsert(rows, {
+    onConflict: "inventory_date,section,product_name",
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+  revalidatePath("/inventory");
+  revalidatePath("/coo");
+  return { success: true };
+}

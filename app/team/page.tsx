@@ -9,6 +9,7 @@ import HeadWorkLogForm from "@/components/HeadWorkLogForm";
 import LivestockIntakeForm from "@/components/LivestockIntakeForm";
 import WaterUsageForm from "@/components/WaterUsageForm";
 import ContainerInventoryForm from "@/components/ContainerInventoryForm";
+import FrozenInventoryForm from "@/components/FrozenInventoryForm";
 import QualityPatrolForm from "@/components/QualityPatrolForm";
 import AuditChecklistForm from "@/components/AuditChecklistForm";
 import ProductionPlanForm from "@/components/ProductionPlanForm";
@@ -245,6 +246,7 @@ export default async function TeamPage() {
     customersRes,
     deliveriesRes,
     workersRes,
+    frozenPrevRes,
   ] = await Promise.all([
     showProdLog
       ? db.from("production_logs").select("id, worker_name, product_name, output_qty, yield_rate, created_at")
@@ -294,6 +296,12 @@ export default async function TeamPage() {
       ? db.from("container_inventory").select("inventory_date, location, product_name, unit, prev_stock, incoming_qty, outgoing_qty")
           .eq("inventory_date", today).order("location")
       : Promise.resolve({ data: null }),
+    showInventory
+      ? db.from("frozen_inventory")
+          .select("section, product_name, current_stock")
+          .lt("inventory_date", today)
+          .order("inventory_date", { ascending: false })
+      : Promise.resolve({ data: null }),
     showCustomers
       ? db.from("customers").select("id, name, type, contact_name, phone, monthly_avg, payment_terms, active, products, memo")
           .eq("active", true).order("monthly_avg", { ascending: false })
@@ -319,6 +327,16 @@ export default async function TeamPage() {
   const customerList   = customersRes.data;
   const recentDeliveries = deliveriesRes.data;
   const teamWorkers = (workersRes.data ?? []).map((w: { name: string }) => w.name);
+  // 전일 기준 최신 재고 (각 품목별 가장 최근 날짜 1건)
+  const frozenPrevMap = new Map<string, number>();
+  for (const row of (frozenPrevRes.data ?? []) as { section: string; product_name: string; current_stock: number }[]) {
+    const key = `${row.section}||${row.product_name}`;
+    if (!frozenPrevMap.has(key)) frozenPrevMap.set(key, row.current_stock);
+  }
+  const frozenPrevData = Array.from(frozenPrevMap.entries()).map(([k, v]) => {
+    const [section, product_name] = k.split("||");
+    return { section, product_name, current_stock: v };
+  });
 
   const avgYield = monthProdLogs && monthProdLogs.length > 0
     ? (monthProdLogs.reduce((s, r) => s + (r.yield_rate ?? 0), 0) / monthProdLogs.length).toFixed(1)
@@ -501,11 +519,11 @@ export default async function TeamPage() {
           </section>
         )}
 
-        {/* ⑧ 재고팀: 컨테이너 재고 */}
+        {/* ⑧ 재고팀: 냉동·냉장·컨테이너 재고 */}
         {showInventory && (
           <section>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">냉동·냉장 재고 현황</h2>
-            <ContainerInventoryForm />
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">냉동·냉장·컨테이너 재고 현황</h2>
+            <FrozenInventoryForm prevData={frozenPrevData} />
             {todayInventory && todayInventory.length > 0 && (
               <div className="mt-3 bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-4 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100 bg-gray-50">오늘 입력된 재고 ({today})</div>

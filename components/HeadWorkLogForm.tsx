@@ -3,6 +3,35 @@
 import { useState } from "react";
 import { submitHeadWorkLog } from "@/app/actions/submit";
 
+const HEAD_WORKERS    = ["조나", "수닐", "바하두루", "마잉", "라이", "로한"];
+const INNARD_WORKERS  = ["베라", "마잉", "미선", "로한"];
+
+function WorkerChips({ label, pool, selected, onChange }: {
+  label: string; pool: string[]; selected: string[]; onChange: (v: string[]) => void;
+}) {
+  function toggle(n: string) {
+    onChange(selected.includes(n) ? selected.filter((x) => x !== n) : [...selected, n]);
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-gray-500">{label}</span>
+      <div className="flex flex-wrap gap-1">
+        {pool.map((n) => {
+          const on = selected.includes(n);
+          return (
+            <button key={n} type="button" onClick={() => toggle(n)}
+              className={`text-[11px] px-2.5 py-1 rounded-full border font-medium cursor-pointer transition-colors
+                ${on ? "bg-[#1F3864] text-white border-[#1F3864]" : "bg-white text-gray-500 border-gray-200 hover:border-[#1F3864]"}`}>
+              {n}
+            </button>
+          );
+        })}
+        {selected.length > 0 && <span className="text-[11px] text-[#1F3864] font-bold self-center">{selected.length}명</span>}
+      </div>
+    </div>
+  );
+}
+
 interface PartItem {
   name: string;
   unit: string;
@@ -62,6 +91,8 @@ export default function HeadWorkLogForm() {
   const [headWorked, setHeadWorked] = useState(0);
   const [headItems, setHeadItems] = useState<PartItem[]>(makeItems(HEAD_PARTS));
   const [innardItems, setInnardItems] = useState<PartItem[]>(makeItems(INNARD_PARTS));
+  const [headWorkers,   setHeadWorkers]   = useState<string[]>([]);
+  const [innardWorkers, setInnardWorkers] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -76,7 +107,12 @@ export default function HeadWorkLogForm() {
   async function handleSubmit() {
     setLoading(true);
     try {
-      await submitHeadWorkLog(workDate, headReceived, headWorked, headItems, innardItems, notes);
+      const workerNote = [
+        headWorkers.length ? `*머리 (${headWorkers.join(",")})` : "",
+        innardWorkers.length ? `*내장 (${innardWorkers.join(",")})` : "",
+        notes,
+      ].filter(Boolean).join("\n");
+      await submitHeadWorkLog(workDate, headReceived, headWorked, headItems, innardItems, workerNote);
       setDone(true);
     } catch (e) {
       alert((e as Error).message);
@@ -181,11 +217,17 @@ export default function HeadWorkLogForm() {
           {renderTable(innardItems, updateInnard, "▶ 내장")}
         </div>
 
+        {/* 작업자 선택 */}
+        <div className="border border-gray-200 rounded-xl p-3 flex flex-col gap-3">
+          <WorkerChips label="머리팀 작업자" pool={HEAD_WORKERS}   selected={headWorkers}   onChange={setHeadWorkers} />
+          <WorkerChips label="내장팀 작업자" pool={INNARD_WORKERS} selected={innardWorkers} onChange={setInnardWorkers} />
+        </div>
+
         {/* 특이사항 */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-gray-500">특이사항</label>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
-            placeholder="예: 머리 (조나,수닐,바하두루,마임) 로한발골지원 (폐수연장) -18:30 종료..."
+          <label className="text-xs font-semibold text-gray-500">특이사항 (종료시간·기타)</label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
+            placeholder="예: -18:30 종료, 로한 발골지원(폐수연장)..."
             className="border border-gray-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#1F3864] resize-none" />
         </div>
 
