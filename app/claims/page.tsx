@@ -6,7 +6,7 @@ import { createServerClient } from "@/lib/supabase";
 
 export default async function ClaimsPage() {
   const session = await getSession();
-  if (!session || session.role !== "coo") redirect("/login");
+  if (!session || (session.role !== "coo" && session.role !== "ceo")) redirect("/login");
 
   const db = createServerClient();
   const { data: claims } = await db

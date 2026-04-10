@@ -224,6 +224,22 @@ export default async function DashboardPage({
           </div>
         </div>
 
+        {/* 바로가기 */}
+        <div className="flex gap-3 flex-wrap">
+          <a href="/products"
+            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]">
+            <span>📦</span> 품목 마스터
+          </a>
+          <a href="/claims"
+            className="flex items-center gap-2 bg-white rounded-xl border border-red-200 px-4 py-2.5 hover:bg-red-50 transition-colors text-sm font-medium text-red-700">
+            <span>📋</span> 클레임 관리
+          </a>
+          <a href="/inventory"
+            className="flex items-center gap-2 bg-white rounded-xl border border-blue-200 px-4 py-2.5 hover:bg-blue-50 transition-colors text-sm font-medium text-blue-700">
+            <span>🏭</span> 창고 재고
+          </a>
+        </div>
+
         {/* ── KPI 카드 ── */}
         <section>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">핵심 지표</h2>
