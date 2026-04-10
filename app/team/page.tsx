@@ -241,12 +241,12 @@ export default async function TeamPage() {
     waterRes,
     workOrderRes,
     planRes,
+    workersRes,
     patrolRes,
     inventoryRes,
+    frozenPrevRes,
     customersRes,
     deliveriesRes,
-    workersRes,
-    frozenPrevRes,
   ] = await Promise.all([
     showProdLog
       ? db.from("production_logs").select("id, worker_name, product_name, output_qty, yield_rate, created_at")
@@ -329,7 +329,7 @@ export default async function TeamPage() {
   const teamWorkers = (workersRes.data ?? []).map((w: { name: string }) => w.name);
   // 전일 기준 최신 재고 (각 품목별 가장 최근 날짜 1건)
   const frozenPrevMap = new Map<string, number>();
-  for (const row of (frozenPrevRes.data ?? []) as { section: string; product_name: string; current_stock: number }[]) {
+  for (const row of (frozenPrevRes.data ?? []) as unknown as { section: string; product_name: string; current_stock: number }[]) {
     const key = `${row.section}||${row.product_name}`;
     if (!frozenPrevMap.has(key)) frozenPrevMap.set(key, row.current_stock);
   }
