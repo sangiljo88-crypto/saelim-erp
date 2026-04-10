@@ -3,12 +3,34 @@
 import { useState } from "react";
 import { submitProductionPlan } from "@/app/actions/submit";
 
-// ── 팀별 기본 작업 템플릿 ─────────────────────────────────────────────────────
+// ── 팀별 기본 작업 템플릿 (실제 업무지시 기반) ───────────────────────────────
 const DEPT_TEMPLATES: Record<string, { task: string; pkg_unit_g: number }[]> = {
   "스킨팀": [
-    { task: "스킨슬라이스 (500g)", pkg_unit_g: 500 },
-    { task: "스킨슬라이스 (1kg)",  pkg_unit_g: 1000 },
-    { task: "스킨블록 작업",       pkg_unit_g: 0 },
+    { task: "팜스코 꼬들목살",     pkg_unit_g: 300 },
+    { task: "목우촌 꼬들살",       pkg_unit_g: 300 },
+    { task: "뿔향정살",            pkg_unit_g: 500 },
+    { task: "오아시스 꼬들살",     pkg_unit_g: 300 },
+    { task: "오아시스 두항정살",   pkg_unit_g: 300 },
+    { task: "오아시스 뿔살",       pkg_unit_g: 300 },
+    { task: "목우촌 두항정살",     pkg_unit_g: 300 },
+    { task: "조각머리",            pkg_unit_g: 0 },
+    { task: "뒷판+발골",           pkg_unit_g: 0 },
+    { task: "틀 작업",             pkg_unit_g: 0 },
+  ],
+  "가공팀": [
+    { task: "해장국",              pkg_unit_g: 430 },
+    { task: "국머리혼합",          pkg_unit_g: 2000 },
+    { task: "모듬내장",            pkg_unit_g: 2000 },
+    { task: "편육",                pkg_unit_g: 300 },
+    { task: "돈까스",              pkg_unit_g: 1000 },
+    { task: "막창슬라이스",        pkg_unit_g: 5000 },
+    { task: "소선지",              pkg_unit_g: 500 },
+    { task: "소창슬라이스",        pkg_unit_g: 2000 },
+    { task: "순도리돈두슬라이스",  pkg_unit_g: 2000 },
+    { task: "양념막창",            pkg_unit_g: 200 },
+    { task: "양념곱창",            pkg_unit_g: 200 },
+    { task: "두태다대기",          pkg_unit_g: 400 },
+    { task: "떡갈비",              pkg_unit_g: 1000 },
     { task: "기타",                pkg_unit_g: 0 },
   ],
   "생산팀": [
@@ -17,17 +39,17 @@ const DEPT_TEMPLATES: Record<string, { task: string; pkg_unit_g: number }[]> = {
     { task: "편육 작업",           pkg_unit_g: 500 },
     { task: "기타",                pkg_unit_g: 0 },
   ],
-  "가공팀": [
-    { task: "소선지 작업",         pkg_unit_g: 500 },
-    { task: "순도리돈두슬라이스",  pkg_unit_g: 300 },
-    { task: "모듬내장 작업",       pkg_unit_g: 500 },
-    { task: "기타",                pkg_unit_g: 0 },
-  ],
 };
 const DEFAULT_TEMPLATE = [
   { task: "작업 1", pkg_unit_g: 0 },
   { task: "작업 2", pkg_unit_g: 0 },
 ];
+
+// ── 팀별 기본 작업자 (DB에 없을 경우 fallback) ────────────────────────────────
+const DEPT_DEFAULT_WORKERS: Record<string, string[]> = {
+  "가공팀": ["쿠이", "배선화", "바른", "라이", "김하늘", "이상일", "서아원", "신태환", "이수아", "꾸앤", "이정은", "수닐", "바하두르", "마잉"],
+  "스킨팀": ["체리", "비아", "김연화", "박생명", "니차건"],
+};
 
 interface PlanRow {
   task: string;           // 고정 (수정 가능)
@@ -211,6 +233,8 @@ interface ProductionPlanFormProps {
 }
 
 export default function ProductionPlanForm({ dept = "생산팀", workers = [] }: ProductionPlanFormProps) {
+  // DB에 worker 계정이 없으면 팀별 기본 명단 사용
+  const effectiveWorkers = workers.length > 0 ? workers : (DEPT_DEFAULT_WORKERS[dept] ?? []);
   const today    = new Date().toISOString().split("T")[0];
   const tomorrow = new Date(Date.now() + 86_400_000).toISOString().split("T")[0];
 
@@ -275,7 +299,7 @@ export default function ProductionPlanForm({ dept = "생산팀", workers = [] }:
         <PlanTable
           rows={todayRows}
           setRows={setTodayRows}
-          workers={workers}
+          workers={effectiveWorkers}
           label={`📋 당일 생산 현황 (${planDate})`}
           color="bg-blue-50 text-blue-800"
         />
@@ -284,7 +308,7 @@ export default function ProductionPlanForm({ dept = "생산팀", workers = [] }:
         <PlanTable
           rows={nextRows}
           setRows={setNextRows}
-          workers={workers}
+          workers={effectiveWorkers}
           label={`📅 익일 생산 계획 (${tomorrow})`}
           color="bg-amber-50 text-amber-800"
         />
