@@ -68,7 +68,7 @@ export default async function InventoryPage() {
               냉동·냉장 창고 품목별 재고 · 기준일: {latestDate}
             </p>
           </div>
-          <a href="/coo" className="text-xs text-[#1F3864] hover:underline">← COO 대시보드</a>
+          <a href={session.role === "ceo" ? "/dashboard" : "/coo"} className="text-xs text-[#1F3864] hover:underline">← 대시보드</a>
         </div>
 
         {rows.length === 0 ? (
