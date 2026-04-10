@@ -23,12 +23,12 @@ const HEAD_PARTS: { name: string; unit: string }[] = [
   { name: "덜미(X)", unit: "kg" },
   { name: "관자",   unit: "kg" },
   { name: "꽃살",   unit: "kg" },
-  { name: "뼛살",   unit: "kg" },
+  { name: "뿔살",   unit: "kg" },
   { name: "설하",   unit: "kg" },
   { name: "두항정", unit: "kg" },
   { name: "통머리", unit: "두" },
   { name: "조각머리", unit: "두" },
-  { name: "릎",     unit: "kg" },
+  { name: "틀",     unit: "kg" },
 ];
 
 const INNARD_PARTS: { name: string; unit: string }[] = [
@@ -59,6 +59,7 @@ export default function HeadWorkLogForm() {
   const today = new Date().toISOString().split("T")[0];
   const [workDate, setWorkDate] = useState(today);
   const [headReceived, setHeadReceived] = useState(0);
+  const [headWorked, setHeadWorked] = useState(0);
   const [headItems, setHeadItems] = useState<PartItem[]>(makeItems(HEAD_PARTS));
   const [innardItems, setInnardItems] = useState<PartItem[]>(makeItems(INNARD_PARTS));
   const [notes, setNotes] = useState("");
@@ -75,7 +76,7 @@ export default function HeadWorkLogForm() {
   async function handleSubmit() {
     setLoading(true);
     try {
-      await submitHeadWorkLog(workDate, headReceived, headItems, innardItems, notes);
+      await submitHeadWorkLog(workDate, headReceived, headWorked, headItems, innardItems, notes);
       setDone(true);
     } catch (e) {
       alert((e as Error).message);
@@ -144,18 +145,27 @@ export default function HeadWorkLogForm() {
       </div>
 
       <div className="p-5 flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-gray-500">작업일</label>
             <input type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)}
               className="border border-gray-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#1F3864]" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-gray-500">머리 입고 두수</label>
-            <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500">머리 입고</label>
+            <div className="flex items-center gap-1">
               <input type="number" value={headReceived || ""} onChange={(e) => setHeadReceived(Number(e.target.value))}
-                placeholder="예: 379"
+                placeholder="입고 두수"
                 className="flex-1 border border-yellow-300 bg-yellow-50 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-[#1F3864]" />
+              <span className="text-xs text-gray-400 shrink-0">두</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-500">작업 두수</label>
+            <div className="flex items-center gap-1">
+              <input type="number" value={headWorked || ""} onChange={(e) => setHeadWorked(Number(e.target.value))}
+                placeholder="작업 두수"
+                className="flex-1 border border-blue-200 bg-blue-50 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-[#1F3864]" />
               <span className="text-xs text-gray-400 shrink-0">두</span>
             </div>
           </div>

@@ -123,6 +123,7 @@ export async function submitWorkOrder(
 export async function submitHeadWorkLog(
   workDate: string,
   headReceived: number,
+  headWorked: number,
   headItems: object[],
   innardItems: object[],
   notes: string
@@ -134,6 +135,7 @@ export async function submitHeadWorkLog(
     work_date:     workDate,
     manager:       session.name,
     head_received: headReceived,
+    head_worked:   headWorked,
     head_items:    headItems,
     innard_items:  innardItems,
     notes,
