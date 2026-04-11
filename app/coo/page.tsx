@@ -148,6 +148,12 @@ export default async function COOPage() {
         {/* 바로가기 링크 */}
         <div className="flex gap-3 flex-wrap">
           <a
+            href="/briefings/new"
+            className="flex items-center gap-2 bg-[#1F3864] text-white rounded-xl border border-[#1F3864] px-4 py-2.5 hover:bg-[#2a4a7f] transition-colors text-sm font-medium"
+          >
+            <span>✏️</span> 브리핑 등록
+          </a>
+          <a
             href="/products"
             className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
           >
