@@ -410,6 +410,33 @@ export async function saveCooComment(reportId: string, comment: string) {
   return { success: true };
 }
 
+// ── 유틸리티 사용량/비용 등록 ────────────────────────────────
+export async function submitUtilityLog(data: {
+  log_month: string;        // YYYY-MM
+  electricity_kwh: number;
+  electricity_cost: number;
+  water_ton: number;
+  water_cost: number;
+  gas_m3: number;
+  gas_cost: number;
+  memo: string;
+}) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const total_cost = (data.electricity_cost || 0) + (data.water_cost || 0) + (data.gas_cost || 0);
+  const { error } = await db.from("utility_logs").upsert({
+    ...data,
+    total_cost,
+    memo:        data.memo || null,
+    recorded_by: session.name,
+  }, { onConflict: "log_month" });
+  if (error) throw new Error(error.message);
+  revalidatePath("/utility");
+  revalidatePath("/coo");
+  return { success: true };
+}
+
 // ── 설비 수리 이력 등록 ───────────────────────────────────────
 export async function submitMaintenanceLog(data: {
   equipment_name: string;

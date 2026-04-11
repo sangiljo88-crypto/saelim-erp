@@ -39,6 +39,7 @@ export default async function COOPage() {
     { data: todayProdLogs },
     { data: todayIntake },
     { data: costApprovals },
+    { data: utilityLogsRaw },
   ] = await Promise.all([
     db.from("action_items").select("id, title, dept, deadline, status").order("deadline"),
     db.from("claims").select("*", { count: "exact", head: true }).eq("status", "pending"),
@@ -65,6 +66,11 @@ export default async function COOPage() {
       .select("id, title, dept, requested_by, request_date, amount, status")
       .eq("status", "pending")
       .order("request_date", { ascending: false }),
+    // 유틸리티 최근 4개월
+    db.from("utility_logs")
+      .select("log_month, total_cost")
+      .order("log_month", { ascending: false })
+      .limit(4),
   ]);
 
   // 창고별 최신 날짜 재고 (테이블 없으면 빈 배열)
@@ -112,6 +118,18 @@ export default async function COOPage() {
     const curr = r.prev_stock + r.incoming_qty - r.outgoing_qty;
     return curr < 100;
   }).length;
+
+  // 유틸리티 리스크 계산 (이번달 vs 직전 3개월 평균)
+  const utilityLogs = (utilityLogsRaw ?? []) as { log_month: string; total_cost: number }[];
+  const utilityThisMonth = utilityLogs.find((l) => l.log_month === thisMonth);
+  const utilityPrev3 = utilityLogs.filter((l) => l.log_month < thisMonth).slice(0, 3);
+  const utilityAvg = utilityPrev3.length
+    ? utilityPrev3.reduce((s, l) => s + l.total_cost, 0) / utilityPrev3.length
+    : 0;
+  const utilityRatio = utilityThisMonth && utilityAvg > 0
+    ? utilityThisMonth.total_cost / utilityAvg
+    : 0;
+  const utilityRisk = utilityRatio >= 1.3 ? "red" : utilityRatio >= 1.15 ? "yellow" : "none";
 
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
@@ -162,6 +180,14 @@ export default async function COOPage() {
             className="flex items-center gap-2 bg-white rounded-xl border border-orange-200 px-4 py-2.5 hover:bg-orange-50 transition-colors text-sm font-medium text-orange-700"
           >
             <span>🔧</span> 설비 관리
+          </a>
+          <a
+            href="/utility"
+            className="flex items-center gap-2 bg-white rounded-xl border border-yellow-200 px-4 py-2.5 hover:bg-yellow-50 transition-colors text-sm font-medium text-yellow-700"
+          >
+            <span>⚡</span> 유틸리티
+            {utilityRisk === "red"    && <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold">위험</span>}
+            {utilityRisk === "yellow" && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">주의</span>}
           </a>
         </div>
 
