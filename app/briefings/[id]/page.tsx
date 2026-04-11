@@ -1,10 +1,11 @@
 import { getSession } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import BriefingActions from "@/components/BriefingActions";
 import { createServerClient } from "@/lib/supabase";
 
 const CATEGORY_META: Record<string, { label: string; color: string }> = {
-  market: { label: "업계동향", color: "bg-blue-100 text-blue-700" },
+  market: { label: "업계동향",   color: "bg-blue-100 text-blue-700" },
   weekly: { label: "주간브리핑", color: "bg-emerald-100 text-emerald-700" },
 };
 
@@ -27,6 +28,7 @@ export default async function BriefingDetailPage({
   if (!briefing) notFound();
 
   const catMeta = CATEGORY_META[briefing.category] ?? { label: briefing.category, color: "bg-gray-100 text-gray-600" };
+  const isCoo = session.role === "coo";
 
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
@@ -61,20 +63,16 @@ export default async function BriefingDetailPage({
           />
 
           {/* 하단 */}
-          <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+          <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
             <a
               href="/briefings"
               className="text-xs text-[#1F3864] hover:underline flex items-center gap-1"
             >
               ← 목록으로
             </a>
-            {session.role === "coo" && (
-              <a
-                href="/briefings/new"
-                className="text-xs bg-[#1F3864] text-white px-4 py-1.5 rounded-lg font-semibold hover:bg-[#2a4a7f]"
-              >
-                ✏️ 새 브리핑 등록
-              </a>
+
+            {isCoo && (
+              <BriefingActions briefingId={id} />
             )}
           </div>
         </div>

@@ -430,6 +430,37 @@ export async function submitBriefing(data: {
   return { success: true, id: inserted?.id };
 }
 
+// ── 브리핑 수정 (COO 전용) ────────────────────────────────────
+export async function updateBriefing(id: string, data: {
+  week_label: string;
+  publish_date: string;
+  category: string;
+  title: string;
+  content_html: string;
+  author: string;
+  is_pinned: boolean;
+}) {
+  const session = await getSession();
+  if (!session || session.role !== "coo") throw new Error("COO 권한 필요");
+  const db = createServerClient();
+  const { error } = await db.from("briefings").update(data).eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/briefings");
+  revalidatePath(`/briefings/${id}`);
+  return { success: true };
+}
+
+// ── 브리핑 삭제 (COO 전용) ────────────────────────────────────
+export async function deleteBriefing(id: string) {
+  const session = await getSession();
+  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  const db = createServerClient();
+  const { error } = await db.from("briefings").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/briefings");
+  return { success: true };
+}
+
 // ── 브리핑 핀 토글 (COO 전용) ────────────────────────────────
 export async function toggleBriefingPin(id: string, is_pinned: boolean) {
   const session = await getSession();

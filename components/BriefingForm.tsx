@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { submitBriefing } from "@/app/actions/submit";
+import { submitBriefing, updateBriefing } from "@/app/actions/submit";
 
 const WEEK_LABELS = (() => {
   const labels: string[] = [];
@@ -40,10 +40,27 @@ const HTML_PLACEHOLDER = `<h2>주요 동향</h2>
 <hr />
 <p><em>출처: 축산물품질평가원, 농림축산식품부</em></p>`;
 
-export default function BriefingForm({ authorName }: { authorName: string }) {
-  const router = useRouter();
+export interface BriefingInitialData {
+  id: string;
+  week_label: string;
+  publish_date: string;
+  category: string;
+  title: string;
+  content_html: string;
+  author: string;
+  is_pinned: boolean;
+}
 
-  // 오늘 날짜 기반 기본 주차 라벨
+export default function BriefingForm({
+  authorName,
+  initial,
+}: {
+  authorName: string;
+  initial?: BriefingInitialData;
+}) {
+  const router = useRouter();
+  const isEdit = !!initial;
+
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
@@ -51,13 +68,13 @@ export default function BriefingForm({ authorName }: { authorName: string }) {
   const defaultWeekLabel = `${year}년 ${month}월 ${weekNum}주차`;
 
   const [form, setForm] = useState({
-    week_label:   defaultWeekLabel,
-    publish_date: now.toISOString().split("T")[0],
-    category:     "market",
-    title:        "",
-    content_html: "",
-    author:       authorName,
-    is_pinned:    false,
+    week_label:   initial?.week_label   ?? defaultWeekLabel,
+    publish_date: initial?.publish_date ?? now.toISOString().split("T")[0],
+    category:     initial?.category     ?? "market",
+    title:        initial?.title        ?? "",
+    content_html: initial?.content_html ?? "",
+    author:       initial?.author       ?? authorName,
+    is_pinned:    initial?.is_pinned    ?? false,
   });
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
@@ -70,11 +87,12 @@ export default function BriefingForm({ authorName }: { authorName: string }) {
     setSaving(true);
     setError("");
     try {
-      const result = await submitBriefing(form);
-      if (result?.id) {
-        router.push(`/briefings/${result.id}`);
+      if (isEdit && initial) {
+        await updateBriefing(initial.id, form);
+        router.push(`/briefings/${initial.id}`);
       } else {
-        router.push("/briefings");
+        const result = await submitBriefing(form);
+        router.push(result?.id ? `/briefings/${result.id}` : "/briefings");
       }
     } catch (err) {
       setError((err as Error).message);
@@ -90,7 +108,6 @@ export default function BriefingForm({ authorName }: { authorName: string }) {
         <div className="text-sm font-bold text-gray-700">기본 정보</div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* 주차 라벨 */}
           <div>
             <label className="text-xs text-gray-500 block mb-1">주차 라벨 *</label>
             <input
@@ -106,7 +123,6 @@ export default function BriefingForm({ authorName }: { authorName: string }) {
             </datalist>
           </div>
 
-          {/* 게시 날짜 */}
           <div>
             <label className="text-xs text-gray-500 block mb-1">게시 날짜 *</label>
             <input
@@ -118,7 +134,6 @@ export default function BriefingForm({ authorName }: { authorName: string }) {
             />
           </div>
 
-          {/* 카테고리 */}
           <div>
             <label className="text-xs text-gray-500 block mb-1">카테고리 *</label>
             <select
@@ -132,7 +147,6 @@ export default function BriefingForm({ authorName }: { authorName: string }) {
             </select>
           </div>
 
-          {/* 작성자 */}
           <div>
             <label className="text-xs text-gray-500 block mb-1">작성자</label>
             <input
@@ -143,7 +157,6 @@ export default function BriefingForm({ authorName }: { authorName: string }) {
           </div>
         </div>
 
-        {/* 제목 */}
         <div>
           <label className="text-xs text-gray-500 block mb-1">제목 *</label>
           <input
@@ -155,7 +168,6 @@ export default function BriefingForm({ authorName }: { authorName: string }) {
           />
         </div>
 
-        {/* 핀 고정 */}
         <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
@@ -197,8 +209,8 @@ export default function BriefingForm({ authorName }: { authorName: string }) {
         )}
 
         <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800">
-          ⚠️ <strong>AI 코드블록에서 복사 시 주의:</strong> 텍스트 드래그 말고 코드블록 우측 상단 <strong>복사(Copy) 버튼</strong>을 눌러 복사하세요.
-          드래그 복사 시 <code className="bg-amber-100 px-1 rounded">hljs</code> 하이라이팅 태그까지 포함되어 깨져 보입니다.
+          ⚠️ <strong>AI 코드블록에서 복사 시:</strong> 텍스트 드래그 말고 코드블록 우측 상단 <strong>복사(Copy) 버튼</strong>을 클릭하세요.
+          붙여넣기 후 <strong>미리보기</strong>로 확인하세요.
         </div>
         <div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
           💡 HTML 태그 사용 가능:
@@ -214,10 +226,10 @@ export default function BriefingForm({ authorName }: { authorName: string }) {
           disabled={saving}
           className="bg-[#1F3864] text-white text-sm font-semibold px-8 py-2.5 rounded-lg hover:bg-[#2a4a7f] disabled:opacity-50 cursor-pointer"
         >
-          {saving ? "저장중…" : "💾 브리핑 등록"}
+          {saving ? "저장중…" : isEdit ? "💾 수정 완료" : "💾 브리핑 등록"}
         </button>
         <a
-          href="/briefings"
+          href={isEdit && initial ? `/briefings/${initial.id}` : "/briefings"}
           className="bg-white border border-gray-200 text-gray-600 text-sm font-medium px-6 py-2.5 rounded-lg hover:bg-gray-50"
         >
           취소
