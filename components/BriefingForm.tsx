@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { submitBriefing, updateBriefing } from "@/app/actions/submit";
 
@@ -76,10 +76,35 @@ export default function BriefingForm({
     author:       initial?.author       ?? authorName,
     is_pinned:    initial?.is_pinned    ?? false,
   });
-  const [saving, setSaving]   = useState(false);
-  const [error, setError]     = useState("");
-  const [preview, setPreview] = useState(false);
-  const [cleaned, setCleaned] = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState("");
+  const [preview, setPreview]     = useState(false);
+  const [cleaned, setCleaned]     = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith(".html") && !file.name.endsWith(".htm")) {
+      setError("HTML 파일(.html)만 업로드할 수 있습니다");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      // <body> 태그가 있으면 body 안의 내용만 추출, 없으면 전체 사용
+      const bodyMatch = content.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+      const html = bodyMatch ? bodyMatch[1].trim() : content;
+      setForm((p) => ({ ...p, content_html: html }));
+      setUploadedFile(file.name);
+      setPreview(true); // 업로드 즉시 미리보기
+      setError("");
+    };
+    reader.readAsText(file, "utf-8");
+    // input 초기화 (같은 파일 재업로드 허용)
+    e.target.value = "";
+  }
 
   function handleCleanHtml() {
     const raw = form.content_html;
@@ -193,6 +218,39 @@ export default function BriefingForm({
 
       {/* HTML 내용 */}
       <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 flex flex-col gap-3">
+
+        {/* 파일 업로드 영역 */}
+        <div className="border-2 border-dashed border-[#1F3864]/30 rounded-xl p-4 bg-[#f8faff] flex flex-col items-center gap-2 text-center">
+          <div className="text-2xl">📂</div>
+          <div className="text-sm font-bold text-gray-700">HTML 파일 직접 업로드</div>
+          <div className="text-xs text-gray-400">AI가 만든 .html 파일을 저장한 뒤 여기에 올리면 됩니다</div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".html,.htm"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="mt-1 text-sm bg-[#1F3864] text-white px-5 py-2 rounded-lg font-semibold hover:bg-[#2a4a7f] cursor-pointer transition-colors"
+          >
+            📁 파일 선택
+          </button>
+          {uploadedFile && (
+            <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 font-medium">
+              ✅ {uploadedFile} 업로드 완료 — 아래 미리보기를 확인하세요
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <div className="flex-1 border-t border-gray-200" />
+          <span>또는 HTML 직접 붙여넣기</span>
+          <div className="flex-1 border-t border-gray-200" />
+        </div>
+
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="text-sm font-bold text-gray-700">내용 (HTML) *</div>
           <div className="flex items-center gap-2">
@@ -230,13 +288,7 @@ export default function BriefingForm({
         )}
 
         <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800">
-          ⚠️ <strong>AI(클로드·젠스파크)에서 HTML 복사 후:</strong> 반드시 <strong>🧹 HTML 정리</strong> 버튼을 눌러주세요.
-          코드하이라이터(hljs) 태그가 자동 제거되어 올바르게 렌더링됩니다.
-          그 다음 <strong>👁 미리보기</strong>로 확인하세요.
-        </div>
-        <div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
-          💡 HTML 태그 사용 가능:
-          <code className="ml-1 text-gray-600">&lt;h2&gt; &lt;h3&gt; &lt;p&gt; &lt;strong&gt; &lt;ul&gt;&lt;li&gt; &lt;table&gt; &lt;hr&gt; &lt;style&gt;</code>
+          ⚠️ <strong>붙여넣기로 입력 시:</strong> 반드시 <strong>🧹 HTML 정리</strong> 후 <strong>👁 미리보기</strong> 확인. 파일 업로드 시는 자동으로 미리보기가 열립니다.
         </div>
       </div>
 
