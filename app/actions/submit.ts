@@ -429,6 +429,54 @@ export async function updateFrozenInventoryRow(
   return { success: true };
 }
 
+// ── 클레임 상세(생산일·원인) 저장 ────────────────────────────
+export async function updateClaimDetails(
+  id: string,
+  productionDate: string | null,
+  rootCause: string | null
+) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const { error } = await db
+    .from("claims")
+    .update({ production_date: productionDate || null, root_cause: rootCause || null })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/claims");
+  revalidatePath("/coo");
+  return { success: true };
+}
+
+// ── 클레임 역추적: 생산일 기준 production_logs + hygiene_checks ─
+export async function fetchClaimTraceability(productionDate: string) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+
+  const [{ data: prodLogs }, { data: hygieneChecks }] = await Promise.all([
+    db.from("production_logs")
+      .select("id, work_date, worker_name, dept, product_name, input_qty, output_qty, waste_qty, issue_note")
+      .eq("work_date", productionDate)
+      .order("dept"),
+    db.from("hygiene_checks")
+      .select("id, check_date, worker_name, dept, items")
+      .eq("check_date", productionDate),
+  ]);
+
+  return {
+    prodLogs: (prodLogs ?? []) as Array<{
+      id: string; work_date: string; worker_name: string; dept: string;
+      product_name: string; input_qty: number; output_qty: number;
+      waste_qty: number; issue_note: string | null;
+    }>,
+    hygieneChecks: (hygieneChecks ?? []) as Array<{
+      id: string; check_date: string; worker_name: string; dept: string;
+      items: Record<string, boolean>;
+    }>,
+  };
+}
+
 // ── 냉동·냉장·컨테이너 재고 ──────────────────────────────────
 export async function saveFrozenInventory(
   inventoryDate: string,

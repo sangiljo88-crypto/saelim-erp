@@ -11,7 +11,7 @@ export default async function ClaimsPage() {
   const db = createServerClient();
   const { data: claims } = await db
     .from("claims")
-    .select("id, claim_date, worker_name, dept, client_name, product_names, claim_type, content, status, created_at")
+    .select("id, claim_date, worker_name, dept, client_name, product_names, claim_type, content, status, created_at, production_date, root_cause")
     .order("created_at", { ascending: false });
 
   const all       = claims ?? [];
@@ -31,10 +31,10 @@ export default async function ClaimsPage() {
             <p className="text-sm text-gray-500">거래처 불만·품질 이슈 접수 및 처리 현황</p>
           </div>
           <a
-            href="/coo"
+            href={session.role === "ceo" ? "/dashboard" : "/coo"}
             className="text-xs text-[#1F3864] hover:underline flex items-center gap-1"
           >
-            ← COO 대시보드
+            ← 대시보드
           </a>
         </div>
 

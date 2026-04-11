@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { updateClaimStatus } from "@/app/actions/submit";
+import { updateClaimStatus, updateClaimDetails, fetchClaimTraceability } from "@/app/actions/submit";
 
 interface Claim {
   id: string;
@@ -14,7 +14,21 @@ interface Claim {
   content: string;
   status: "pending" | "in_progress" | "resolved";
   created_at: string;
+  production_date?: string | null;
+  root_cause?: string | null;
 }
+
+type TraceResult = {
+  prodLogs: Array<{
+    id: string; work_date: string; worker_name: string; dept: string;
+    product_name: string; input_qty: number; output_qty: number;
+    waste_qty: number; issue_note: string | null;
+  }>;
+  hygieneChecks: Array<{
+    id: string; check_date: string; worker_name: string; dept: string;
+    items: Record<string, boolean>;
+  }>;
+};
 
 type FilterStatus = "all" | "pending" | "in_progress" | "resolved";
 type SortKey = "created_at" | "claim_date" | "client_name" | "status";
@@ -30,8 +44,8 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 const STATUS_ORDER = { pending: 0, in_progress: 1, resolved: 2 };
 
 const STATUS_META = {
-  pending:     { label: "미처리",  color: "bg-red-100 text-red-700",      dot: "bg-red-500" },
-  in_progress: { label: "처리중",  color: "bg-amber-100 text-amber-700",  dot: "bg-amber-500" },
+  pending:     { label: "미처리",  color: "bg-red-100 text-red-700",         dot: "bg-red-500" },
+  in_progress: { label: "처리중",  color: "bg-amber-100 text-amber-700",     dot: "bg-amber-500" },
   resolved:    { label: "완료",    color: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500" },
 };
 
@@ -50,6 +64,18 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
   const [loading, setLoading]   = useState<string | null>(null);
   const [errors, setErrors]     = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  // 역추적 관련 state
+  const [traceEdits, setTraceEdits]   = useState<Record<string, { production_date: string; root_cause: string }>>({});
+  const [traceSaving, setTraceSaving] = useState<string | null>(null);
+  const [traceData, setTraceData]     = useState<Record<string, TraceResult | "loading">>({});
+
+  function getTraceEdit(claim: Claim) {
+    return traceEdits[claim.id] ?? {
+      production_date: claim.production_date ?? "",
+      root_cause:      claim.root_cause ?? "",
+    };
+  }
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -97,6 +123,37 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
       setErrors((prev) => ({ ...prev, [id]: (err as Error).message }));
     } finally {
       setLoading(null);
+    }
+  }
+
+  async function handleSaveDetails(claim: Claim) {
+    const edit = getTraceEdit(claim);
+    setTraceSaving(claim.id);
+    try {
+      await updateClaimDetails(claim.id, edit.production_date || null, edit.root_cause || null);
+      setClaims((prev) =>
+        prev.map((c) =>
+          c.id === claim.id
+            ? { ...c, production_date: edit.production_date || null, root_cause: edit.root_cause || null }
+            : c
+        )
+      );
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, [claim.id]: (err as Error).message }));
+    } finally {
+      setTraceSaving(null);
+    }
+  }
+
+  async function handleFetchTrace(claimId: string, productionDate: string) {
+    if (!productionDate) return;
+    setTraceData((prev) => ({ ...prev, [claimId]: "loading" }));
+    try {
+      const result = await fetchClaimTraceability(productionDate);
+      setTraceData((prev) => ({ ...prev, [claimId]: result }));
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, [claimId]: (err as Error).message }));
+      setTraceData((prev) => { const n = { ...prev }; delete n[claimId]; return n; });
     }
   }
 
@@ -166,6 +223,10 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
             const icon    = CLAIM_TYPE_ICON[claim.claim_type] ?? "📋";
             const err     = errors[claim.id];
             const busy    = loading?.startsWith(claim.id);
+            const edit    = getTraceEdit(claim);
+            const trace   = traceData[claim.id];
+            const isTraceLoading = trace === "loading";
+            const traceResult = trace && trace !== "loading" ? trace : null;
 
             return (
               <div
@@ -193,6 +254,11 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
                         <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
                         {meta.label}
                       </span>
+                      {claim.production_date && (
+                        <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                          생산일 {claim.production_date}
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-gray-400 mt-0.5 truncate">
                       {claim.dept} · {claim.worker_name} · {claim.claim_date}
@@ -200,7 +266,6 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {/* 빠른 상태 버튼 */}
                     {claim.status === "pending" && (
                       <button
                         onClick={(e) => { e.stopPropagation(); handleStatusChange(claim.id, "in_progress"); }}
@@ -234,7 +299,9 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
 
                 {/* 상세 펼침 */}
                 {isOpen && (
-                  <div className="border-t border-gray-100 px-5 py-4 bg-gray-50 rounded-b-xl">
+                  <div className="border-t border-gray-100 px-5 py-4 bg-gray-50 rounded-b-xl flex flex-col gap-4">
+
+                    {/* 기본 정보 */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                       <div>
                         <span className="text-xs text-gray-400 block mb-1">클레임 내용</span>
@@ -250,8 +317,8 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
                       </div>
                     </div>
 
-                    {/* 상태 변경 전체 버튼 */}
-                    <div className="mt-4 flex items-center gap-2 flex-wrap">
+                    {/* 상태 변경 */}
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-gray-400 mr-1">상태 변경:</span>
                       {(["pending", "in_progress", "resolved"] as const).map((s) => (
                         <button
@@ -269,7 +336,152 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
                       ))}
                     </div>
 
-                    {err && <p className="mt-2 text-xs text-red-500">{err}</p>}
+                    {/* 생산 이력 역추적 */}
+                    <div className="border-t border-blue-100 pt-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xs font-bold text-blue-700">🔍 생산 이력 역추적</span>
+                        <span className="text-xs text-gray-400">— 의심 생산일 기준으로 당일 생산·위생 기록을 조회합니다</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-1">의심 생산일</label>
+                          <input
+                            type="date"
+                            value={edit.production_date}
+                            onChange={(e) =>
+                              setTraceEdits((prev) => ({
+                                ...prev,
+                                [claim.id]: { ...edit, production_date: e.target.value },
+                              }))
+                            }
+                            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-1">원인 분석</label>
+                          <textarea
+                            value={edit.root_cause}
+                            onChange={(e) =>
+                              setTraceEdits((prev) => ({
+                                ...prev,
+                                [claim.id]: { ...edit, root_cause: e.target.value },
+                              }))
+                            }
+                            rows={2}
+                            placeholder="ex) 당일 품질팀 위생점검 누락, 작업 중 온도 이탈 등"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 mb-3">
+                        <button
+                          onClick={() => handleSaveDetails(claim)}
+                          disabled={traceSaving === claim.id}
+                          className="text-xs bg-[#1F3864] text-white px-4 py-1.5 rounded-lg font-semibold disabled:opacity-50 cursor-pointer hover:bg-[#2a4a7f]"
+                        >
+                          {traceSaving === claim.id ? "저장중…" : "💾 저장"}
+                        </button>
+                        <button
+                          onClick={() => handleFetchTrace(claim.id, edit.production_date)}
+                          disabled={!edit.production_date || isTraceLoading}
+                          className="text-xs bg-blue-600 text-white px-4 py-1.5 rounded-lg font-semibold disabled:opacity-40 cursor-pointer hover:bg-blue-700"
+                        >
+                          {isTraceLoading ? "조회중…" : "🔎 역추적 조회"}
+                        </button>
+                      </div>
+
+                      {/* 역추적 결과 */}
+                      {traceResult && (
+                        <div className="flex flex-col gap-3">
+
+                          {/* 생산 로그 */}
+                          <div>
+                            <div className="text-xs font-semibold text-gray-600 mb-1.5">
+                              📋 당일 생산 기록 ({edit.production_date}) — {traceResult.prodLogs.length}건
+                            </div>
+                            {traceResult.prodLogs.length === 0 ? (
+                              <div className="text-xs text-gray-400 bg-white border border-gray-100 rounded-lg px-3 py-2">
+                                해당 날짜 생산 기록 없음
+                              </div>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs border border-gray-100 rounded-lg overflow-hidden">
+                                  <thead className="bg-gray-100">
+                                    <tr>
+                                      <th className="text-left px-2 py-1.5 text-gray-500 font-medium">팀</th>
+                                      <th className="text-left px-2 py-1.5 text-gray-500 font-medium">작업자</th>
+                                      <th className="text-left px-2 py-1.5 text-gray-500 font-medium">품명</th>
+                                      <th className="text-center px-2 py-1.5 text-gray-500 font-medium">투입</th>
+                                      <th className="text-center px-2 py-1.5 text-gray-500 font-medium">생산</th>
+                                      <th className="text-center px-2 py-1.5 text-gray-500 font-medium">폐기</th>
+                                      <th className="text-left px-2 py-1.5 text-amber-600 font-medium">이슈</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="bg-white divide-y divide-gray-50">
+                                    {traceResult.prodLogs.map((log) => (
+                                      <tr key={log.id} className={log.issue_note ? "bg-amber-50" : ""}>
+                                        <td className="px-2 py-1.5 text-gray-600">{log.dept}</td>
+                                        <td className="px-2 py-1.5 text-gray-600">{log.worker_name}</td>
+                                        <td className="px-2 py-1.5 text-gray-800 font-medium">{log.product_name}</td>
+                                        <td className="px-2 py-1.5 text-center text-gray-600">{log.input_qty}</td>
+                                        <td className="px-2 py-1.5 text-center text-emerald-700 font-semibold">{log.output_qty}</td>
+                                        <td className="px-2 py-1.5 text-center text-red-500">{log.waste_qty || "-"}</td>
+                                        <td className="px-2 py-1.5 text-amber-700">{log.issue_note ?? "-"}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 위생 체크 */}
+                          <div>
+                            <div className="text-xs font-semibold text-gray-600 mb-1.5">
+                              🧹 당일 위생 점검 기록 — {traceResult.hygieneChecks.length}건
+                            </div>
+                            {traceResult.hygieneChecks.length === 0 ? (
+                              <div className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2 font-medium">
+                                ⚠️ 해당 날짜 위생 점검 기록 없음 — 누락 가능성 확인 필요
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-1.5">
+                                {traceResult.hygieneChecks.map((hc) => {
+                                  const failedItems = Object.entries(hc.items)
+                                    .filter(([, v]) => !v)
+                                    .map(([k]) => k);
+                                  return (
+                                    <div key={hc.id} className={`text-xs rounded-lg px-3 py-2 border ${failedItems.length > 0 ? "bg-red-50 border-red-200" : "bg-white border-gray-100"}`}>
+                                      <span className="font-semibold text-gray-700">{hc.dept}</span>
+                                      <span className="text-gray-400 ml-2">{hc.worker_name}</span>
+                                      {failedItems.length > 0 ? (
+                                        <span className="ml-2 text-red-600 font-medium">
+                                          ❌ 미이행: {failedItems.join(", ")}
+                                        </span>
+                                      ) : (
+                                        <span className="ml-2 text-emerald-600 font-medium">✅ 전 항목 이행</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 저장된 원인 분석 표시 */}
+                          {claim.root_cause && (
+                            <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                              <span className="text-xs font-semibold text-blue-700">📝 원인 분석: </span>
+                              <span className="text-xs text-blue-800">{claim.root_cause}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {err && <p className="text-xs text-red-500">{err}</p>}
                   </div>
                 )}
               </div>
