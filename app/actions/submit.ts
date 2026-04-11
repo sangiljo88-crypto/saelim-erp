@@ -412,11 +412,13 @@ export async function saveCooComment(reportId: string, comment: string) {
 
 // ── 유틸리티 사용량/비용 등록 ────────────────────────────────
 export async function submitUtilityLog(data: {
-  log_month: string;        // YYYY-MM
+  log_month: string;
   electricity_kwh: number;
   electricity_cost: number;
-  water_ton: number;
-  water_cost: number;
+  water_tap_ton: number;
+  water_tap_cost: number;
+  water_ground_ton: number;
+  water_ground_cost: number;
   gas_m3: number;
   gas_cost: number;
   memo: string;
@@ -424,7 +426,10 @@ export async function submitUtilityLog(data: {
   const session = await getSession();
   if (!session) throw new Error("로그인 필요");
   const db = createServerClient();
-  const total_cost = (data.electricity_cost || 0) + (data.water_cost || 0) + (data.gas_cost || 0);
+  const total_cost = (data.electricity_cost || 0)
+    + (data.water_tap_cost || 0)
+    + (data.water_ground_cost || 0)
+    + (data.gas_cost || 0);
   const { error } = await db.from("utility_logs").upsert({
     ...data,
     total_cost,

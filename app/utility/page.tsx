@@ -13,7 +13,7 @@ export default async function UtilityPage() {
   const db = createServerClient();
   const { data: logs } = await db
     .from("utility_logs")
-    .select("id, log_month, electricity_kwh, electricity_cost, water_ton, water_cost, gas_m3, gas_cost, total_cost, memo, recorded_by, created_at")
+    .select("id, log_month, electricity_kwh, electricity_cost, water_tap_ton, water_tap_cost, water_ground_ton, water_ground_cost, gas_m3, gas_cost, total_cost, memo, recorded_by, created_at")
     .order("log_month", { ascending: false })
     .limit(24);
 

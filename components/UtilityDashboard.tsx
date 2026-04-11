@@ -8,8 +8,10 @@ export interface UtilityLog {
   log_month: string;
   electricity_kwh: number;
   electricity_cost: number;
-  water_ton: number;
-  water_cost: number;
+  water_tap_ton: number;
+  water_tap_cost: number;
+  water_ground_ton: number;
+  water_ground_cost: number;
   gas_m3: number;
   gas_cost: number;
   total_cost: number;
@@ -18,7 +20,6 @@ export interface UtilityLog {
   created_at: string;
 }
 
-// ── 리스크 계산: 최근 3개월 평균 대비 현재월 비율 ──────────────
 function getRiskLevel(current: number, prev3: number[]): "green" | "yellow" | "red" | "none" {
   if (prev3.length === 0 || current === 0) return "none";
   const avg = prev3.reduce((s, v) => s + v, 0) / prev3.length;
@@ -31,10 +32,10 @@ function getRiskLevel(current: number, prev3: number[]): "green" | "yellow" | "r
 
 function getRiskMeta(level: "green" | "yellow" | "red" | "none") {
   return {
-    green:  { label: "정상",   color: "bg-emerald-100 text-emerald-700", bar: "bg-emerald-500", icon: "🟢" },
-    yellow: { label: "주의",   color: "bg-amber-100 text-amber-700",    bar: "bg-amber-500",   icon: "🟡" },
-    red:    { label: "위험",   color: "bg-red-100 text-red-700",        bar: "bg-red-500",     icon: "🔴" },
-    none:   { label: "데이터 없음", color: "bg-gray-100 text-gray-500", bar: "bg-gray-300",   icon: "⚪" },
+    green:  { label: "정상",       color: "bg-emerald-100 text-emerald-700", bar: "bg-emerald-500", icon: "🟢" },
+    yellow: { label: "주의",       color: "bg-amber-100 text-amber-700",    bar: "bg-amber-500",   icon: "🟡" },
+    red:    { label: "위험",       color: "bg-red-100 text-red-700",        bar: "bg-red-500",     icon: "🔴" },
+    none:   { label: "데이터 없음", color: "bg-gray-100 text-gray-500",     bar: "bg-gray-300",    icon: "⚪" },
   }[level];
 }
 
@@ -47,11 +48,14 @@ function fmt만(v: number) {
 }
 
 const EMPTY_FORM = {
-  log_month: "", electricity_kwh: 0, electricity_cost: 0,
-  water_ton: 0, water_cost: 0, gas_m3: 0, gas_cost: 0, memo: "",
+  log_month: "",
+  electricity_kwh: 0, electricity_cost: 0,
+  water_tap_ton: 0,    water_tap_cost: 0,
+  water_ground_ton: 0, water_ground_cost: 0,
+  gas_m3: 0,           gas_cost: 0,
+  memo: "",
 };
 
-// CSS 바 차트 (외부 라이브러리 없이)
 function BarChart({ logs }: { logs: UtilityLog[] }) {
   const recent = logs.slice(0, 6).reverse();
   if (recent.length === 0) return null;
@@ -87,33 +91,30 @@ export default function UtilityDashboard({ initialLogs }: { initialLogs: Utility
   const today = new Date().toISOString().split("T")[0];
   const thisMonth = today.slice(0, 7);
 
-  // 현재 월 + 이전 3개월 데이터
   const current = logs.find((l) => l.log_month === thisMonth);
   const prev3   = logs.filter((l) => l.log_month < thisMonth).slice(0, 3);
 
-  // 항목별 리스크
-  const elecRisk  = getRiskLevel(current?.electricity_cost ?? 0, prev3.map((l) => l.electricity_cost));
-  const waterRisk = getRiskLevel(current?.water_cost ?? 0,       prev3.map((l) => l.water_cost));
-  const gasRisk   = getRiskLevel(current?.gas_cost ?? 0,         prev3.map((l) => l.gas_cost));
+  const elecRisk       = getRiskLevel(current?.electricity_cost ?? 0,    prev3.map((l) => l.electricity_cost));
+  const waterTapRisk   = getRiskLevel(current?.water_tap_cost ?? 0,      prev3.map((l) => l.water_tap_cost));
+  const waterGroundRisk= getRiskLevel(current?.water_ground_cost ?? 0,   prev3.map((l) => l.water_ground_cost));
+  const gasRisk        = getRiskLevel(current?.gas_cost ?? 0,            prev3.map((l) => l.gas_cost));
 
-  // 전체 리스크 (가장 높은 수준)
-  const levels = [elecRisk, waterRisk, gasRisk];
+  const levels = [elecRisk, waterTapRisk, waterGroundRisk, gasRisk];
   const overallRisk = levels.includes("red") ? "red"
     : levels.includes("yellow") ? "yellow"
     : levels.every((l) => l === "green") ? "green"
     : "none";
 
-  // 전월 대비 변화율
-  function changeRate(curr: number, prev: number) {
-    if (prev === 0) return null;
-    const rate = ((curr - prev) / prev) * 100;
-    return rate;
-  }
-  const prev1 = logs.find((l) => {
+  const prev1 = (() => {
     const [y, m] = thisMonth.split("-").map(Number);
     const prevM = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
-    return l.log_month === prevM;
-  });
+    return logs.find((l) => l.log_month === prevM);
+  })();
+
+  function changeRate(curr: number, prev: number) {
+    if (prev === 0) return null;
+    return ((curr - prev) / prev) * 100;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -122,19 +123,20 @@ export default function UtilityDashboard({ initialLogs }: { initialLogs: Utility
     setSaveErr("");
     try {
       await submitUtilityLog(form);
-      const total_cost = (form.electricity_cost || 0) + (form.water_cost || 0) + (form.gas_cost || 0);
+      const total_cost = (form.electricity_cost || 0)
+        + (form.water_tap_cost || 0)
+        + (form.water_ground_cost || 0)
+        + (form.gas_cost || 0);
       const newLog: UtilityLog = {
-        id: crypto.randomUUID(),
-        ...form,
-        total_cost,
-        memo: form.memo || null,
+        id: crypto.randomUUID(), ...form,
+        total_cost, memo: form.memo || null,
         recorded_by: "방금 저장됨",
         created_at: new Date().toISOString(),
       };
-      setLogs((prev) => {
-        const filtered = prev.filter((l) => l.log_month !== form.log_month);
-        return [newLog, ...filtered].sort((a, b) => b.log_month.localeCompare(a.log_month));
-      });
+      setLogs((prev) =>
+        [newLog, ...prev.filter((l) => l.log_month !== form.log_month)]
+          .sort((a, b) => b.log_month.localeCompare(a.log_month))
+      );
       setForm({ ...EMPTY_FORM });
       setShowForm(false);
     } catch (err) {
@@ -146,13 +148,21 @@ export default function UtilityDashboard({ initialLogs }: { initialLogs: Utility
 
   const overallMeta = getRiskMeta(overallRisk);
 
+  // 항목 정의 (수도/지하수 분리)
+  const items = [
+    { label: "전기",   icon: "⚡", cost: current?.electricity_cost ?? 0,  usage: current?.electricity_kwh ?? 0,  unit: "kWh", risk: elecRisk,        prevAvg: prev3.length ? prev3.reduce((s, l) => s + l.electricity_cost, 0) / prev3.length : 0 },
+    { label: "수도",   icon: "🚰", cost: current?.water_tap_cost ?? 0,     usage: current?.water_tap_ton ?? 0,    unit: "ton", risk: waterTapRisk,    prevAvg: prev3.length ? prev3.reduce((s, l) => s + l.water_tap_cost, 0) / prev3.length : 0 },
+    { label: "지하수", icon: "💧", cost: current?.water_ground_cost ?? 0,  usage: current?.water_ground_ton ?? 0, unit: "ton", risk: waterGroundRisk, prevAvg: prev3.length ? prev3.reduce((s, l) => s + l.water_ground_cost, 0) / prev3.length : 0 },
+    { label: "가스",   icon: "🔥", cost: current?.gas_cost ?? 0,           usage: current?.gas_m3 ?? 0,           unit: "m³",  risk: gasRisk,         prevAvg: prev3.length ? prev3.reduce((s, l) => s + l.gas_cost, 0) / prev3.length : 0 },
+  ];
+
   return (
     <div className="flex flex-col gap-5">
 
       {/* 전체 리스크 배너 */}
       {overallRisk !== "none" && (
         <div className={`rounded-xl border px-5 py-4 flex items-center justify-between ${
-          overallRisk === "red"    ? "bg-red-50 border-red-300" :
+          overallRisk === "red" ? "bg-red-50 border-red-300" :
           overallRisk === "yellow" ? "bg-amber-50 border-amber-300" :
           "bg-emerald-50 border-emerald-200"
         }`}>
@@ -184,26 +194,21 @@ export default function UtilityDashboard({ initialLogs }: { initialLogs: Utility
         </div>
       )}
 
-      {/* 항목별 리스크 카드 */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "전기",   icon: "⚡", cost: current?.electricity_cost ?? 0, usage: current?.electricity_kwh ?? 0, unit: "kWh", risk: elecRisk,  prevAvg: prev3.length ? prev3.reduce((s, l) => s + l.electricity_cost, 0) / prev3.length : 0 },
-          { label: "수도",   icon: "💧", cost: current?.water_cost ?? 0,       usage: current?.water_ton ?? 0,       unit: "ton",  risk: waterRisk, prevAvg: prev3.length ? prev3.reduce((s, l) => s + l.water_cost, 0) / prev3.length : 0 },
-          { label: "가스",   icon: "🔥", cost: current?.gas_cost ?? 0,         usage: current?.gas_m3 ?? 0,          unit: "m³",   risk: gasRisk,   prevAvg: prev3.length ? prev3.reduce((s, l) => s + l.gas_cost, 0) / prev3.length : 0 },
-        ].map((item) => {
+      {/* 항목별 리스크 카드 (2x2 그리드) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {items.map((item) => {
           const meta = getRiskMeta(item.risk);
           const ratio = item.prevAvg > 0 ? ((item.cost / item.prevAvg - 1) * 100) : null;
           return (
             <div key={item.label} className={`bg-white rounded-xl border p-4 ${
               item.risk === "red" ? "border-red-200" :
-              item.risk === "yellow" ? "border-amber-200" :
-              "border-gray-200"
+              item.risk === "yellow" ? "border-amber-200" : "border-gray-200"
             }`}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-bold text-gray-700">{item.icon} {item.label}</span>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
+                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
               </div>
-              <div className="text-lg font-bold text-gray-800">{fmt만(item.cost)}</div>
+              <div className="text-base font-bold text-gray-800">{fmt만(item.cost)}</div>
               {item.usage > 0 && (
                 <div className="text-xs text-gray-400 mt-0.5">{item.usage.toLocaleString()} {item.unit}</div>
               )}
@@ -212,7 +217,6 @@ export default function UtilityDashboard({ initialLogs }: { initialLogs: Utility
                   3개월 평균 대비 {ratio > 0 ? "▲" : "▼"} {Math.abs(ratio).toFixed(0)}%
                 </div>
               )}
-              {/* 미니 바 */}
               {item.prevAvg > 0 && (
                 <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                   <div
@@ -251,13 +255,10 @@ export default function UtilityDashboard({ initialLogs }: { initialLogs: Utility
 
           <div>
             <label className="text-xs text-gray-500 block mb-1">대상 월 *</label>
-            <input
-              type="month"
-              value={form.log_month}
+            <input type="month" value={form.log_month}
               onChange={(e) => setForm((p) => ({ ...p, log_month: e.target.value }))}
               className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
-              required
-            />
+              required />
           </div>
 
           {/* 전기 */}
@@ -281,19 +282,38 @@ export default function UtilityDashboard({ initialLogs }: { initialLogs: Utility
 
           {/* 수도 */}
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
-            <div className="text-xs font-bold text-blue-700 mb-2">💧 수도</div>
+            <div className="text-xs font-bold text-blue-700 mb-2">🚰 수도</div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-xs text-gray-500 block mb-1">사용량 (ton)</label>
-                <input type="number" min={0} value={form.water_ton || ""}
-                  onChange={(e) => setForm((p) => ({ ...p, water_ton: Number(e.target.value) || 0 }))}
+                <input type="number" min={0} value={form.water_tap_ton || ""}
+                  onChange={(e) => setForm((p) => ({ ...p, water_tap_ton: Number(e.target.value) || 0 }))}
                   placeholder="0" className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 block mb-1">요금 (원)</label>
-                <input type="number" min={0} value={form.water_cost || ""}
-                  onChange={(e) => setForm((p) => ({ ...p, water_cost: Number(e.target.value) || 0 }))}
+                <input type="number" min={0} value={form.water_tap_cost || ""}
+                  onChange={(e) => setForm((p) => ({ ...p, water_tap_cost: Number(e.target.value) || 0 }))}
                   placeholder="0" className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300" />
+              </div>
+            </div>
+          </div>
+
+          {/* 지하수 */}
+          <div className="bg-cyan-50 border border-cyan-100 rounded-xl p-3">
+            <div className="text-xs font-bold text-cyan-700 mb-2">💧 지하수</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">사용량 (ton)</label>
+                <input type="number" min={0} value={form.water_ground_ton || ""}
+                  onChange={(e) => setForm((p) => ({ ...p, water_ground_ton: Number(e.target.value) || 0 }))}
+                  placeholder="0" className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-cyan-300" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">요금 (원)</label>
+                <input type="number" min={0} value={form.water_ground_cost || ""}
+                  onChange={(e) => setForm((p) => ({ ...p, water_ground_cost: Number(e.target.value) || 0 }))}
+                  placeholder="0" className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-cyan-300" />
               </div>
             </div>
           </div>
@@ -321,7 +341,7 @@ export default function UtilityDashboard({ initialLogs }: { initialLogs: Utility
             <label className="text-xs text-gray-500 block mb-1">메모</label>
             <input value={form.memo}
               onChange={(e) => setForm((p) => ({ ...p, memo: e.target.value }))}
-              placeholder="ex) 냉동기 이상으로 전기 급등, 가스 누수 수리 후 정상화"
+              placeholder="ex) 냉동기 이상 전기 급등, 지하수 펌프 교체 후 정상화"
               className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30" />
           </div>
 
@@ -345,9 +365,10 @@ export default function UtilityDashboard({ initialLogs }: { initialLogs: Utility
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-2 text-gray-500 font-medium">월</th>
-                  <th className="text-right px-3 py-2 text-yellow-600 font-medium">⚡ 전기</th>
-                  <th className="text-right px-3 py-2 text-blue-600 font-medium">💧 수도</th>
-                  <th className="text-right px-3 py-2 text-orange-600 font-medium">🔥 가스</th>
+                  <th className="text-right px-2 py-2 text-yellow-600 font-medium">⚡ 전기</th>
+                  <th className="text-right px-2 py-2 text-blue-600 font-medium">🚰 수도</th>
+                  <th className="text-right px-2 py-2 text-cyan-600 font-medium">💧 지하수</th>
+                  <th className="text-right px-2 py-2 text-orange-600 font-medium">🔥 가스</th>
                   <th className="text-right px-4 py-2 text-gray-700 font-medium">합계</th>
                   <th className="text-left px-3 py-2 text-gray-500 font-medium">메모</th>
                 </tr>
@@ -363,17 +384,21 @@ export default function UtilityDashboard({ initialLogs }: { initialLogs: Utility
                         {log.log_month.replace("-", "년 ")}월
                         {isThisMonth && <span className="ml-1 text-blue-600 font-bold text-[10px]">이번달</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-right text-gray-700">
+                      <td className="px-2 py-2.5 text-right text-gray-700">
                         {fmt만(log.electricity_cost)}
-                        {log.electricity_kwh > 0 && <span className="text-gray-400 ml-1">({log.electricity_kwh.toLocaleString()}kWh)</span>}
+                        {log.electricity_kwh > 0 && <span className="text-gray-400 ml-0.5">({log.electricity_kwh.toLocaleString()})</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-right text-gray-700">
-                        {fmt만(log.water_cost)}
-                        {log.water_ton > 0 && <span className="text-gray-400 ml-1">({log.water_ton}t)</span>}
+                      <td className="px-2 py-2.5 text-right text-gray-700">
+                        {fmt만(log.water_tap_cost)}
+                        {log.water_tap_ton > 0 && <span className="text-gray-400 ml-0.5">({log.water_tap_ton}t)</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-right text-gray-700">
+                      <td className="px-2 py-2.5 text-right text-gray-700">
+                        {fmt만(log.water_ground_cost)}
+                        {log.water_ground_ton > 0 && <span className="text-gray-400 ml-0.5">({log.water_ground_ton}t)</span>}
+                      </td>
+                      <td className="px-2 py-2.5 text-right text-gray-700">
                         {fmt만(log.gas_cost)}
-                        {log.gas_m3 > 0 && <span className="text-gray-400 ml-1">({log.gas_m3}m³)</span>}
+                        {log.gas_m3 > 0 && <span className="text-gray-400 ml-0.5">({log.gas_m3}m³)</span>}
                       </td>
                       <td className="px-4 py-2.5 text-right font-bold text-gray-800">
                         {fmt만(log.total_cost)}
@@ -383,7 +408,7 @@ export default function UtilityDashboard({ initialLogs }: { initialLogs: Utility
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-gray-400 max-w-[160px] truncate">{log.memo ?? "-"}</td>
+                      <td className="px-3 py-2.5 text-gray-400 max-w-[140px] truncate">{log.memo ?? "-"}</td>
                     </tr>
                   );
                 })}
