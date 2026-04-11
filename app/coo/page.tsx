@@ -157,6 +157,12 @@ export default async function COOPage() {
               </span>
             )}
           </a>
+          <a
+            href="/maintenance"
+            className="flex items-center gap-2 bg-white rounded-xl border border-orange-200 px-4 py-2.5 hover:bg-orange-50 transition-colors text-sm font-medium text-orange-700"
+          >
+            <span>🔧</span> 설비 관리
+          </a>
         </div>
 
         {/* 요약 카드 */}

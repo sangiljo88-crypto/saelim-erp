@@ -410,6 +410,36 @@ export async function saveCooComment(reportId: string, comment: string) {
   return { success: true };
 }
 
+// ── 설비 수리 이력 등록 ───────────────────────────────────────
+export async function submitMaintenanceLog(data: {
+  equipment_name: string;
+  dept: string;
+  log_date: string;
+  log_type: string;
+  description: string;
+  parts_used: string;
+  cost: number;
+  technician: string;
+  result: string;
+  next_check_date: string;
+}) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+  const db = createServerClient();
+  const { error } = await db.from("maintenance_logs").insert({
+    ...data,
+    parts_used:      data.parts_used     || null,
+    cost:            data.cost           || 0,
+    technician:      data.technician     || null,
+    next_check_date: data.next_check_date || null,
+    recorded_by:     session.name,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/maintenance");
+  revalidatePath("/coo");
+  return { success: true };
+}
+
 // ── 냉동 재고 단건 수정 (COO 현장 수정) ────────────────────────
 export async function updateFrozenInventoryRow(
   id: string,

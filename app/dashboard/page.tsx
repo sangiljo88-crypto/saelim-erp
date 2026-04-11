@@ -238,6 +238,10 @@ export default async function DashboardPage({
             className="flex items-center gap-2 bg-white rounded-xl border border-blue-200 px-4 py-2.5 hover:bg-blue-50 transition-colors text-sm font-medium text-blue-700">
             <span>🏭</span> 창고 재고
           </a>
+          <a href="/maintenance"
+            className="flex items-center gap-2 bg-white rounded-xl border border-orange-200 px-4 py-2.5 hover:bg-orange-50 transition-colors text-sm font-medium text-orange-700">
+            <span>🔧</span> 설비 관리
+          </a>
         </div>
 
         {/* ── KPI 카드 ── */}
