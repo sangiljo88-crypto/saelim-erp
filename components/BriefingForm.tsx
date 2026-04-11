@@ -196,9 +196,13 @@ export default function BriefingForm({ authorName }: { authorName: string }) {
           />
         )}
 
+        <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800">
+          ⚠️ <strong>AI 코드블록에서 복사 시 주의:</strong> 텍스트 드래그 말고 코드블록 우측 상단 <strong>복사(Copy) 버튼</strong>을 눌러 복사하세요.
+          드래그 복사 시 <code className="bg-amber-100 px-1 rounded">hljs</code> 하이라이팅 태그까지 포함되어 깨져 보입니다.
+        </div>
         <div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
           💡 HTML 태그 사용 가능:
-          <code className="ml-1 text-gray-600">&lt;h2&gt; &lt;h3&gt; &lt;p&gt; &lt;strong&gt; &lt;ul&gt;&lt;li&gt; &lt;table&gt; &lt;hr&gt;</code>
+          <code className="ml-1 text-gray-600">&lt;h2&gt; &lt;h3&gt; &lt;p&gt; &lt;strong&gt; &lt;ul&gt;&lt;li&gt; &lt;table&gt; &lt;hr&gt; &lt;style&gt;</code>
         </div>
       </div>
 
