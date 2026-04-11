@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { toggleBriefingPin } from "@/app/actions/submit";
+import { toggleBriefingPin, deleteBriefing } from "@/app/actions/submit";
 
 export interface BriefingSummary {
   id: string;
@@ -30,7 +30,9 @@ export default function BriefingList({
 }) {
   const [briefings, setBriefings] = useState<BriefingSummary[]>(initialBriefings);
   const [filter, setFilter]       = useState<FilterCat>("all");
-  const [pinLoading, setPinLoading] = useState<string | null>(null);
+  const [pinLoading, setPinLoading]     = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
   const filtered = briefings.filter(
     (b) => filter === "all" || b.category === filter
@@ -47,6 +49,17 @@ export default function BriefingList({
     market: briefings.filter((b) => b.category === "market").length,
     weekly: briefings.filter((b) => b.category === "weekly").length,
   };
+
+  async function handleDelete(id: string) {
+    setDeleteLoading(id);
+    try {
+      await deleteBriefing(id);
+      setBriefings((prev) => prev.filter((b) => b.id !== id));
+    } finally {
+      setDeleteLoading(null);
+      setDeleteConfirm(null);
+    }
+  }
 
   async function handlePin(id: string, current: boolean) {
     setPinLoading(id);
@@ -129,9 +142,10 @@ export default function BriefingList({
                   <span className="text-gray-300 text-sm shrink-0 mt-1">›</span>
                 </a>
 
-                {/* COO 핀 토글 버튼 */}
+                {/* COO 버튼 영역 */}
                 {isCoo && (
-                  <div className="px-5 pb-3 pt-0 flex justify-end border-t border-gray-50">
+                  <div className="px-5 pb-3 pt-0 flex items-center justify-between border-t border-gray-50">
+                    {/* 핀 토글 */}
                     <button
                       onClick={() => handlePin(b.id, b.is_pinned)}
                       disabled={pinLoading === b.id}
@@ -143,6 +157,33 @@ export default function BriefingList({
                     >
                       {pinLoading === b.id ? "…" : b.is_pinned ? "📌 고정 해제" : "📌 상단 고정"}
                     </button>
+
+                    {/* 삭제 */}
+                    {deleteConfirm === b.id ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-red-500 font-medium">정말 삭제할까요?</span>
+                        <button
+                          onClick={() => handleDelete(b.id)}
+                          disabled={deleteLoading === b.id}
+                          className="text-xs bg-red-500 text-white px-3 py-1 rounded-lg font-semibold hover:bg-red-600 disabled:opacity-50 cursor-pointer"
+                        >
+                          {deleteLoading === b.id ? "삭제중…" : "삭제"}
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm(null)}
+                          className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+                        >
+                          취소
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDeleteConfirm(b.id)}
+                        className="text-xs text-red-400 hover:text-red-600 border border-red-100 hover:border-red-300 px-3 py-1 rounded-lg font-medium cursor-pointer transition-colors"
+                      >
+                        🗑 삭제
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
