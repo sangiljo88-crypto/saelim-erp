@@ -410,6 +410,17 @@ export async function saveCooComment(reportId: string, comment: string) {
   return { success: true };
 }
 
+// ── hljs 코드블록 span 태그 제거 ────────────────────────────────
+// Claude/Genspark 등 AI 코드하이라이터가 감싼 <span class="hljs-*"> 제거
+function stripHljsSpans(html: string): string {
+  return html
+    .replace(/<span\s+class="hljs-[^"]*"[^>]*>/g, "")
+    .replace(/<span\s+class="language-[^"]*"[^>]*>/g, "")
+    .replace(/<\/span>/g, "")
+    // <code> 블록 안에 남은 불필요한 줄바꿈 정리
+    .replace(/<code[^>]*>\s*\n/g, (m) => m.trimEnd());
+}
+
 // ── 브리핑 등록 (COO 전용) ────────────────────────────────────
 export async function submitBriefing(data: {
   week_label: string;
@@ -423,7 +434,8 @@ export async function submitBriefing(data: {
   const session = await getSession();
   if (!session || session.role !== "coo") throw new Error("COO 권한 필요");
   const db = createServerClient();
-  const { data: inserted, error } = await db.from("briefings").insert(data).select("id").single();
+  const cleaned = { ...data, content_html: stripHljsSpans(data.content_html) };
+  const { data: inserted, error } = await db.from("briefings").insert(cleaned).select("id").single();
   if (error) throw new Error(error.message);
   revalidatePath("/briefings");
   revalidatePath("/coo");
@@ -443,7 +455,8 @@ export async function updateBriefing(id: string, data: {
   const session = await getSession();
   if (!session || session.role !== "coo") throw new Error("COO 권한 필요");
   const db = createServerClient();
-  const { error } = await db.from("briefings").update(data).eq("id", id);
+  const cleaned = { ...data, content_html: stripHljsSpans(data.content_html) };
+  const { error } = await db.from("briefings").update(cleaned).eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/briefings");
   revalidatePath(`/briefings/${id}`);

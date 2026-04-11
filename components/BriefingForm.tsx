@@ -79,6 +79,18 @@ export default function BriefingForm({
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
   const [preview, setPreview] = useState(false);
+  const [cleaned, setCleaned] = useState(false);
+
+  function handleCleanHtml() {
+    const raw = form.content_html;
+    const result = raw
+      .replace(/<span\s+class="hljs-[^"]*"[^>]*>/g, "")
+      .replace(/<span\s+class="language-[^"]*"[^>]*>/g, "")
+      .replace(/<\/span>/g, "");
+    setForm((p) => ({ ...p, content_html: result }));
+    setCleaned(true);
+    setTimeout(() => setCleaned(false), 2500);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -181,15 +193,24 @@ export default function BriefingForm({
 
       {/* HTML 내용 */}
       <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 flex flex-col gap-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="text-sm font-bold text-gray-700">내용 (HTML) *</div>
-          <button
-            type="button"
-            onClick={() => setPreview(!preview)}
-            className="text-xs text-[#1F3864] hover:underline cursor-pointer"
-          >
-            {preview ? "✏️ 편집" : "👁 미리보기"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCleanHtml}
+              className="text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 border border-amber-300 px-3 py-1 rounded-lg font-semibold cursor-pointer transition-colors"
+            >
+              {cleaned ? "✅ 정리됨!" : "🧹 HTML 정리"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreview(!preview)}
+              className="text-xs text-[#1F3864] hover:underline cursor-pointer"
+            >
+              {preview ? "✏️ 편집" : "👁 미리보기"}
+            </button>
+          </div>
         </div>
 
         {preview ? (
@@ -209,8 +230,9 @@ export default function BriefingForm({
         )}
 
         <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800">
-          ⚠️ <strong>AI 코드블록에서 복사 시:</strong> 텍스트 드래그 말고 코드블록 우측 상단 <strong>복사(Copy) 버튼</strong>을 클릭하세요.
-          붙여넣기 후 <strong>미리보기</strong>로 확인하세요.
+          ⚠️ <strong>AI(클로드·젠스파크)에서 HTML 복사 후:</strong> 반드시 <strong>🧹 HTML 정리</strong> 버튼을 눌러주세요.
+          코드하이라이터(hljs) 태그가 자동 제거되어 올바르게 렌더링됩니다.
+          그 다음 <strong>👁 미리보기</strong>로 확인하세요.
         </div>
         <div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
           💡 HTML 태그 사용 가능:
