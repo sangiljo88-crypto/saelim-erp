@@ -53,7 +53,7 @@ export default function BriefingInteractions({
     setReadLoading(true);
     try {
       const result = await toggleBriefingRead(briefingId);
-      if ("reads" in result) setReads(result.reads);
+      if ("reads" in result && result.reads) setReads(result.reads);
     } finally {
       setReadLoading(false);
     }
@@ -65,8 +65,8 @@ export default function BriefingInteractions({
     setCommentLoading(true);
     try {
       const result = await addBriefingComment(briefingId, commentText);
-      if ("comment" in result) {
-        setComments((prev) => [...prev, result.comment]);
+      if ("comment" in result && result.comment) {
+        setComments((prev) => [...prev, result.comment as BriefingComment]);
         setCommentText("");
       }
     } finally {
