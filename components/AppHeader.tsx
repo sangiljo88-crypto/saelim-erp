@@ -81,9 +81,19 @@ export default async function AppHeader({ session, subtitle }: { session: Sessio
             📋 주간보고
           </a>
         )}
+        {session.role !== "worker" && (
+          <a href="/approvals" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
+            💰 비용승인
+          </a>
+        )}
         <a href="/customers" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
           🤝 거래처
         </a>
+        {(session.role === "coo" || session.role === "ceo" || session.role === "manager") && (
+          <a href="/deliveries" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
+            🚚 납품이력
+          </a>
+        )}
         {(session.role === "coo" || session.role === "ceo") && (
           <a href="/yield" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
             📊 수율
@@ -107,6 +117,11 @@ export default async function AppHeader({ session, subtitle }: { session: Sessio
         {(session.role === "coo" || session.role === "ceo") && (
           <a href="/utility" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
             ⚡ 유틸리티
+          </a>
+        )}
+        {(session.role === "coo" || session.role === "ceo") && (
+          <a href="/staff" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
+            👥 직원 관리
           </a>
         )}
         {session.role === "coo" && (

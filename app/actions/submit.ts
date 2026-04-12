@@ -706,3 +706,118 @@ export async function saveFrozenInventory(
   revalidatePath("/coo");
   return { success: true };
 }
+
+// ── 비용 승인 요청 등록 (팀장 이상) ─────────────────────────
+export async function submitCostApprovalRequest(formData: FormData) {
+  const session = await getSession();
+  if (!session || (session.role !== "manager" && session.role !== "coo")) {
+    return { error: "팀장 이상 권한 필요" };
+  }
+
+  const db = createServerClient();
+  const { error } = await db.from("cost_approvals").insert({
+    title:        formData.get("title") as string,
+    dept:         session.dept ?? session.role,
+    requested_by: session.name,
+    request_date: (formData.get("request_date") as string) || new Date().toISOString().split("T")[0],
+    amount:       Number(formData.get("amount")) || 0,
+    status:       "pending",
+  });
+
+  if (error) return { error: error.message };
+  revalidatePath("/approvals");
+  revalidatePath("/coo");
+  return { success: true };
+}
+
+// ── 비용 승인/반려 (COO + CEO) ────────────────────────────────
+export async function approveCostRequest(itemId: string, status: "approved" | "rejected", comment: string) {
+  const session = await getSession();
+  if (!session || (session.role !== "coo" && session.role !== "ceo")) return { error: "COO/CEO 권한 필요" };
+
+  const db = createServerClient();
+  const { error } = await db
+    .from("cost_approvals")
+    .update({
+      status,
+      comment:     comment || null,
+      approved_by: session.name,
+      approved_at: new Date().toISOString(),
+    })
+    .eq("id", itemId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/approvals");
+  revalidatePath("/coo");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+// ── 직원 등록 (COO 전용) ─────────────────────────────────────────
+export async function createStaffMember(formData: FormData) {
+  const session = await getSession();
+  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+
+  const { hashPassword } = await import("@/lib/hash");
+  const db = createServerClient();
+
+  const login_id = (formData.get("login_id") as string)?.trim();
+  const password = (formData.get("password") as string)?.trim();
+  const name     = (formData.get("name") as string)?.trim();
+  const role     = formData.get("role") as string;
+  const dept     = (formData.get("dept") as string)?.trim() || null;
+
+  if (!login_id || !password || !name || !role) return { error: "필수 항목 누락" };
+
+  const { error } = await db.from("members").insert({
+    login_id,
+    password: hashPassword(password),
+    name,
+    role,
+    dept,
+    active: true,
+  });
+
+  if (error) {
+    if (error.message.includes("unique") || error.message.includes("duplicate")) {
+      return { error: `아이디 '${login_id}'가 이미 존재합니다` };
+    }
+    return { error: error.message };
+  }
+  revalidatePath("/staff");
+  return { success: true };
+}
+
+// ── 직원 활성/비활성 토글 (COO 전용) ────────────────────────
+export async function toggleMemberActive(memberId: string, active: boolean) {
+  const session = await getSession();
+  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+
+  const db = createServerClient();
+  const { error } = await db
+    .from("members")
+    .update({ active })
+    .eq("id", memberId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/staff");
+  return { success: true };
+}
+
+// ── 직원 비밀번호 변경 (COO 전용) ───────────────────────────
+export async function resetMemberPassword(memberId: string, newPassword: string) {
+  const session = await getSession();
+  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (!newPassword || newPassword.length < 4) return { error: "비밀번호는 4자 이상" };
+
+  const { hashPassword } = await import("@/lib/hash");
+  const db = createServerClient();
+  const { error } = await db
+    .from("members")
+    .update({ password: hashPassword(newPassword) })
+    .eq("id", memberId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/staff");
+  return { success: true };
+}
