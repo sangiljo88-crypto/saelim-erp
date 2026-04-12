@@ -5,10 +5,17 @@ import { createServerClient } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 
 function stripHljsSpans(html: string): string {
-  return html
-    .replace(/<span\s+class="hljs-[^"]*"[^>]*>/g, "")
-    .replace(/<span\s+class="language-[^"]*"[^>]*>/g, "")
-    .replace(/<\/span>/g, "");
+  // hljs span 태그를 내용만 남기고 제거 (중첩 처리 위해 반복)
+  // 일반 </span>은 절대 건드리지 않음
+  let result = html;
+  let prev = "";
+  while (prev !== result) {
+    prev = result;
+    result = result
+      .replace(/<span\s+class="hljs-[^"]*"[^>]*>([\s\S]*?)<\/span>/g, "$1")
+      .replace(/<span\s+class="language-[^"]*"[^>]*>([\s\S]*?)<\/span>/g, "$1");
+  }
+  return result;
 }
 
 /** 전체 HTML 문서에서 <body> 내용만 추출. body가 없으면 원본 반환 */

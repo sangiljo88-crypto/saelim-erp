@@ -413,12 +413,18 @@ export async function saveCooComment(reportId: string, comment: string) {
 // ── hljs 코드블록 span 태그 제거 ────────────────────────────────
 // Claude/Genspark 등 AI 코드하이라이터가 감싼 <span class="hljs-*"> 제거
 function stripHljsSpans(html: string): string {
-  return html
-    .replace(/<span\s+class="hljs-[^"]*"[^>]*>/g, "")
-    .replace(/<span\s+class="language-[^"]*"[^>]*>/g, "")
-    .replace(/<\/span>/g, "")
-    // <code> 블록 안에 남은 불필요한 줄바꿈 정리
-    .replace(/<code[^>]*>\s*\n/g, (m) => m.trimEnd());
+  // hljs span을 내용만 남기고 제거 (중첩 처리 위해 반복)
+  // 일반 </span>은 건드리지 않음
+  let result = html;
+  let prev = "";
+  while (prev !== result) {
+    prev = result;
+    result = result
+      .replace(/<span\s+class="hljs-[^"]*"[^>]*>([\s\S]*?)<\/span>/g, "$1")
+      .replace(/<span\s+class="language-[^"]*"[^>]*>([\s\S]*?)<\/span>/g, "$1");
+  }
+  // <code> 블록 안에 남은 불필요한 줄바꿈 정리
+  return result.replace(/<code[^>]*>\s*\n/g, (m) => m.trimEnd());
 }
 
 // ── 브리핑 등록 (COO 전용) ────────────────────────────────────
