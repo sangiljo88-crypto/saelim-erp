@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/auth";
+import { getSession, STAFF_USERS } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import BriefingActions from "@/components/BriefingActions";
@@ -90,6 +90,7 @@ export default async function BriefingDetailPage({
             currentUserId={session.id}
             currentUserName={session.name}
             isCoo={isCoo}
+            staffUsers={isCoo || session.role === "ceo" ? STAFF_USERS : undefined}
           />
 
           {/* 하단 */}

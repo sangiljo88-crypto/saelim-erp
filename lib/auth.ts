@@ -79,6 +79,11 @@ export async function getSession(): Promise<SessionPayload | null> {
   return decrypt(token);
 }
 
+/** COO/CEO 열람 현황에서 사용할 실제 직원 목록 (레거시 테스트 계정 제외) */
+export const STAFF_USERS = MOCK_USERS.filter(
+  (u) => !["ceo", "coo", "worker1", "worker2", "prod"].includes(u.id)
+).map((u) => ({ id: u.id, name: u.name, dept: u.dept }));
+
 export function roleHomePath(role: Role): string {
   const map: Record<Role, string> = {
     ceo: "/dashboard",

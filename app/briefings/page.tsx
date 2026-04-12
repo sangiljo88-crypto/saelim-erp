@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/auth";
+import { getSession, STAFF_USERS } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import BriefingList from "@/components/BriefingList";
@@ -8,12 +8,28 @@ export default async function BriefingsPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
+  const isAdmin = session.role === "coo" || session.role === "ceo";
   const db = createServerClient();
+
   const { data: briefings } = await db
     .from("briefings")
     .select("id, week_label, publish_date, category, title, author, is_pinned, created_at")
     .order("is_pinned", { ascending: false })
     .order("publish_date", { ascending: false });
+
+  // COO/CEO만 열람 수 가져오기
+  let readCounts: Record<string, number> = {};
+  if (isAdmin && briefings && briefings.length > 0) {
+    const { data: reads } = await db
+      .from("briefing_reads")
+      .select("briefing_id")
+      .in("briefing_id", briefings.map((b) => b.id));
+    if (reads) {
+      for (const r of reads) {
+        readCounts[r.briefing_id] = (readCounts[r.briefing_id] ?? 0) + 1;
+      }
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
@@ -38,6 +54,9 @@ export default async function BriefingsPage() {
         <BriefingList
           initialBriefings={(briefings ?? []) as Parameters<typeof BriefingList>[0]["initialBriefings"]}
           isCoo={session.role === "coo"}
+          isAdmin={isAdmin}
+          readCounts={readCounts}
+          totalStaff={STAFF_USERS.length}
         />
 
         <footer className="text-center text-xs text-gray-400 py-4 border-t border-gray-200">

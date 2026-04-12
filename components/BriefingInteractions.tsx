@@ -21,6 +21,8 @@ function formatRelativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString("ko-KR", { month: "long", day: "numeric" });
 }
 
+interface StaffUser { id: string; name: string; dept?: string }
+
 interface Props {
   briefingId: string;
   initialReads: BriefingRead[];
@@ -28,6 +30,7 @@ interface Props {
   currentUserId: string;
   currentUserName: string;
   isCoo: boolean;
+  staffUsers?: StaffUser[];  // COO/CEO에게만 전달
 }
 
 export default function BriefingInteractions({
@@ -36,6 +39,7 @@ export default function BriefingInteractions({
   initialComments,
   currentUserId,
   isCoo,
+  staffUsers,
 }: Props) {
   const [reads, setReads] = useState<BriefingRead[]>(initialReads);
   const [comments, setComments] = useState<BriefingComment[]>(initialComments);
@@ -141,6 +145,49 @@ export default function BriefingInteractions({
           )}
         </div>
       </div>
+
+      {/* ── COO/CEO 전용: 열람 현황 ───────────────────── */}
+      {staffUsers && staffUsers.length > 0 && (() => {
+        const readIds = new Set(reads.map((r) => r.user_id));
+        const unread = staffUsers.filter((u) => !readIds.has(u.id));
+        const pct = Math.round((reads.length / staffUsers.length) * 100);
+        const barColor = pct >= 80 ? "bg-green-500" : pct >= 40 ? "bg-amber-400" : "bg-red-400";
+        return (
+          <div className="border-t border-gray-50 px-6 py-5 bg-gray-50/60">
+            <div className="text-xs font-semibold text-gray-500 mb-3 flex items-center gap-2">
+              📊 열람 현황
+              <span className={`px-2 py-0.5 rounded-full text-xs font-bold
+                ${pct >= 80 ? "bg-green-100 text-green-700" : pct >= 40 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600"}`}>
+                {reads.length}/{staffUsers.length}명 · {pct}%
+              </span>
+            </div>
+            {/* 진행 바 */}
+            <div className="w-full h-2 bg-gray-200 rounded-full mb-4 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${barColor}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            {/* 미열람자 */}
+            {unread.length > 0 && (
+              <div>
+                <div className="text-xs text-gray-400 mb-2">아직 안 읽은 직원 ({unread.length}명)</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {unread.map((u) => (
+                    <span key={u.id} className="text-xs px-2.5 py-1 rounded-full bg-white border border-gray-200 text-gray-500">
+                      {u.name}
+                      {u.dept && <span className="text-gray-300 ml-1 text-[10px]">{u.dept}</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {unread.length === 0 && (
+              <div className="text-xs text-green-600 font-semibold">✅ 전원 열람 완료</div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── 댓글 ──────────────────────────────────────── */}
       <div className="border-t border-gray-50 px-6 py-5">

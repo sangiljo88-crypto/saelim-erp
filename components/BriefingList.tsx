@@ -39,9 +39,15 @@ function getDeptLabel(cat: string) {
 export default function BriefingList({
   initialBriefings,
   isCoo,
+  isAdmin = false,
+  readCounts = {},
+  totalStaff = 0,
 }: {
   initialBriefings: BriefingSummary[];
   isCoo: boolean;
+  isAdmin?: boolean;
+  readCounts?: Record<string, number>;
+  totalStaff?: number;
 }) {
   const [briefings, setBriefings]           = useState<BriefingSummary[]>(initialBriefings);
   const [filter, setFilter]                 = useState<DeptFilter>("전체");
@@ -144,11 +150,27 @@ export default function BriefingList({
                       <span className="text-xs text-gray-400">{b.week_label}</span>
                     </div>
                     <div className="text-sm font-bold text-gray-800 truncate">{b.title}</div>
-                    <div className="text-xs text-gray-400 mt-1">
-                      {b.author} · {b.publish_date}&nbsp;
-                      <span className="text-gray-300">
-                        {new Date(b.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })} 등록
+                    <div className="text-xs text-gray-400 mt-1 flex items-center gap-2 flex-wrap">
+                      <span>{b.author} · {b.publish_date}&nbsp;
+                        <span className="text-gray-300">
+                          {new Date(b.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })} 등록
+                        </span>
                       </span>
+                      {/* COO/CEO 전용 열람율 배지 */}
+                      {isAdmin && totalStaff > 0 && (() => {
+                        const cnt = readCounts[b.id] ?? 0;
+                        const pct = Math.round((cnt / totalStaff) * 100);
+                        const color = pct === 0
+                          ? "bg-gray-100 text-gray-400"
+                          : pct >= 80
+                          ? "bg-green-100 text-green-700"
+                          : "bg-amber-100 text-amber-700";
+                        return (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${color}`}>
+                            👁 {cnt}/{totalStaff}명 · {pct}%
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                   <span className="text-gray-300 text-sm shrink-0 mt-1">›</span>
