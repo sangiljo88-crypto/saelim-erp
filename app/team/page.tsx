@@ -16,6 +16,7 @@ import ProductionPlanForm from "@/components/ProductionPlanForm";
 import { createServerClient } from "@/lib/supabase";
 import CustomerListView from "@/components/CustomerListView";
 import TeamClaimsSection from "@/components/TeamClaimsSection";
+import MonthlyKpiForm from "@/components/MonthlyKpiForm";
 
 type KPI = { label: string; value: string; target: string; ok: boolean };
 type Todo = { text: string; defaultDone?: boolean };
@@ -180,6 +181,7 @@ const deptData: Record<string, { kpis: KPI[]; todos: Todo[] }> = {
 };
 
 // ── 부서별 표시 섹션 설정 ────────────────────────────────────
+const SHOW_MONTHLY_KPI   = new Set(["회계팀"]);                // 월간 KPI 입력
 const SHOW_PRODUCT_MASTER = new Set(["재고팀", "회계팀", "개발팀"]);
 const SHOW_WORK_ORDER  = new Set(["개발팀", "가공팀"]);   // 업무지시서
 const SHOW_HEAD_WORK   = new Set(["생산팀"]);              // 두/내장 작업일지
@@ -227,8 +229,9 @@ export default async function TeamPage() {
   const showPatrol    = SHOW_PATROL.has(dept);
   const showAudit     = SHOW_AUDIT.has(dept);
   const showPlan      = SHOW_PLAN.has(dept);
-  const showCustomers  = SHOW_CUSTOMERS.has(dept);
-  const showDeliveries = SHOW_DELIVERIES.has(dept);
+  const showCustomers   = SHOW_CUSTOMERS.has(dept);
+  const showDeliveries  = SHOW_DELIVERIES.has(dept);
+  const showMonthlyKpi  = SHOW_MONTHLY_KPI.has(dept);
 
   const [
     prodLogsRes,
@@ -247,6 +250,7 @@ export default async function TeamPage() {
     frozenPrevRes,
     customersRes,
     deliveriesRes,
+    monthlyKpiRes,
   ] = await Promise.all([
     showProdLog
       ? db.from("production_logs").select("id, worker_name, product_name, output_qty, yield_rate, created_at")
@@ -310,6 +314,14 @@ export default async function TeamPage() {
       ? db.from("deliveries").select("id, delivery_date, customer_name, total_amount, status, driver, items")
           .order("delivery_date", { ascending: false }).limit(10)
       : Promise.resolve({ data: null }),
+    // 회계팀: 이번 달 monthly_kpi 기존 값
+    showMonthlyKpi
+      ? db.from("monthly_kpi")
+          .select("kpi_key, actual")
+          .eq("dept", "전사")
+          .eq("year_month", thisMonth)
+          .in("kpi_key", ["profit_margin", "cash_balance", "receivables", "revenue"])
+      : Promise.resolve({ data: null }),
   ]);
 
   const todayProdLogs  = prodLogsRes.data;
@@ -326,6 +338,18 @@ export default async function TeamPage() {
   const todayInventory = inventoryRes.data;
   const customerList   = customersRes.data;
   const recentDeliveries = deliveriesRes.data;
+
+  // 회계팀 KPI 기존값
+  const kpiMap = Object.fromEntries(
+    ((monthlyKpiRes.data ?? []) as Array<{ kpi_key: string; actual: number }>)
+      .map((r) => [r.kpi_key, r.actual])
+  );
+  const existingKpi = {
+    profit_margin: kpiMap["profit_margin"] ?? null,
+    cash_balance:  kpiMap["cash_balance"]  ?? null,
+    receivables:   kpiMap["receivables"]   ?? null,
+    revenue:       kpiMap["revenue"]       ?? null,
+  };
   const teamWorkers = (workersRes.data ?? []).map((w: { name: string }) => w.name);
   // 전일 기준 최신 재고 (각 품목별 가장 최근 날짜 1건)
   const frozenPrevMap = new Map<string, number>();
@@ -724,6 +748,17 @@ export default async function TeamPage() {
                 <div className="text-sm text-gray-500">최근 납품 데이터가 없습니다</div>
               </div>
             )}
+          </section>
+        )}
+
+        {/* 회계팀 전용: 월간 KPI 입력 */}
+        {showMonthlyKpi && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">월간 재무 KPI</h2>
+              <span className="text-xs text-gray-400">→ COO 검토 → CEO 대시보드 자동 반영</span>
+            </div>
+            <MonthlyKpiForm yearMonth={thisMonth} existing={existingKpi} />
           </section>
         )}
 

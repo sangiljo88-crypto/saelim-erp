@@ -419,6 +419,39 @@ export async function submitDelivery(
   return { success: true };
 }
 
+// ── 회계팀 월간 KPI 저장 (→ CEO 대시보드 자동 반영) ─────────
+export async function saveMonthlyKpi(formData: FormData) {
+  const session = await getSession();
+  if (!session || session.role !== "manager" || session.dept !== "회계팀") {
+    return { error: "회계팀 팀장 권한 필요" };
+  }
+
+  const db        = createServerClient();
+  const yearMonth = formData.get("year_month") as string;
+
+  const rows = [
+    { kpi_key: "profit_margin", actual: Number(formData.get("profit_margin")) || 0, target: 10 },
+    { kpi_key: "cash_balance",  actual: Math.round(Number(formData.get("cash_balance")) * 100_000_000), target: 1_000_000_000 },
+    { kpi_key: "receivables",   actual: Math.round(Number(formData.get("receivables"))  * 100_000_000), target: 200_000_000  },
+  ].map((r) => ({
+    year_month: yearMonth,
+    dept:       "전사",
+    kpi_key:    r.kpi_key,
+    actual:     r.actual,
+    target:     r.target,
+  }));
+
+  const { error } = await db
+    .from("monthly_kpi")
+    .upsert(rows, { onConflict: "year_month,dept,kpi_key" });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard");
+  revalidatePath("/team");
+  return { success: true };
+}
+
 // ── COO 코멘트 저장 ──────────────────────────────────────────
 export async function saveCooComment(reportId: string, comment: string) {
   const session = await getSession();
