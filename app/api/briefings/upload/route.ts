@@ -12,20 +12,16 @@ function stripHljsSpans(html: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  // ── API Key 인증 ──────────────────────────────────────────────
-  // 브래킷 표기법 — Next.js 빌드 시점 인라인 방지
-  const apiKey = process.env["BRIEFING_API_KEY"];
-  if (!apiKey) {
-    return NextResponse.json({ error: "서버 설정 오류: BRIEFING_API_KEY 미설정" }, { status: 500 });
-  }
+  // ── API Key 인증 ─────────────────────────────────────────────
+  // globalThis.process 로 Next.js 빌드 최적화 완전 우회
+  const nodeEnv  = (globalThis as Record<string, unknown>)["process"] as NodeJS.Process | undefined;
+  const apiKey   = nodeEnv?.env?.["BRIEFING_API_KEY"] ?? process.env["BRIEFING_API_KEY"] ?? "";
 
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const providedKey = authHeader.startsWith("Bearer ")
-    ? authHeader.slice(7)
-    : authHeader;
+  const authHeader  = req.headers.get("Authorization") ?? "";
+  const providedKey = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
 
-  if (providedKey !== apiKey) {
-    return NextResponse.json({ error: "인증 실패: API Key가 올바르지 않습니다" }, { status: 401 });
+  if (!apiKey || !providedKey || providedKey !== apiKey) {
+    return NextResponse.json({ error: "인증 실패: API Key를 확인해주세요" }, { status: 401 });
   }
 
   // ── Body 파싱 ────────────────────────────────────────────────
@@ -71,7 +67,20 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ id: data.id, status: "ok" }, { status: 201 });
 }
 
-// GET 요청 — 헬스체크
-export async function GET() {
+// GET 요청 — 헬스체크 + 환경변수 상태 확인
+export async function GET(req: NextRequest) {
+  const nodeEnv = (globalThis as Record<string, unknown>)["process"] as NodeJS.Process | undefined;
+  const keyViaGlobal  = nodeEnv?.env?.["BRIEFING_API_KEY"];
+  const keyViaProcess = process.env["BRIEFING_API_KEY"];
+  const url = new URL(req.url);
+
+  // ?debug=1 붙이면 키 설정 여부 노출 (보안: 값은 노출 안 함)
+  if (url.searchParams.get("debug") === "1") {
+    return NextResponse.json({
+      status:          "ok",
+      key_via_global:  keyViaGlobal  ? `set (len=${keyViaGlobal.length})`  : "NOT SET",
+      key_via_process: keyViaProcess ? `set (len=${keyViaProcess.length})` : "NOT SET",
+    });
+  }
   return NextResponse.json({ status: "ok", endpoint: "POST /api/briefings/upload" });
 }
