@@ -10,10 +10,18 @@ export default async function StaffPage() {
   if (session.role !== "coo" && session.role !== "ceo") redirect("/login");
 
   const db = createServerClient();
-  const { data: dbMembers } = await db
-    .from("members")
-    .select("id, login_id, name, role, dept, active, created_at")
-    .order("created_at", { ascending: true });
+  const [{ data: dbMembers }, { data: salaryRows }] = await Promise.all([
+    db
+      .from("members")
+      .select("id, login_id, name, role, dept, active, created_at")
+      .order("created_at", { ascending: true }),
+    db.from("staff_salaries").select("login_id, base_salary"),
+  ]);
+
+  const salaryMap: Record<string, number> = {};
+  for (const row of salaryRows ?? []) {
+    salaryMap[row.login_id] = row.base_salary;
+  }
 
   // MOCK_USERS를 동일한 형식으로 변환 (레거시로 표시)
   const mockStaff = MOCK_USERS
@@ -29,7 +37,7 @@ export default async function StaffPage() {
       isLegacy: true,
     }));
 
-  const dbStaff = (dbMembers ?? []).map(m => ({ ...m, isLegacy: false }));
+  const dbStaff = (dbMembers ?? []).map(m => ({ ...m, isLegacy: false, base_salary: salaryMap[m.login_id] ?? 0 }));
 
   // DB 계정과 MOCK이 같은 login_id인 경우 DB 우선
   const dbLoginIds = new Set(dbStaff.map(m => m.login_id));
@@ -48,6 +56,7 @@ export default async function StaffPage() {
         <StaffManager
           staff={allStaff}
           canEdit={session.role === "coo"}
+          salaryMap={salaryMap}
         />
       </main>
     </div>

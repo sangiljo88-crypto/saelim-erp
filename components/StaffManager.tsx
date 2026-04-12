@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createStaffMember, toggleMemberActive, resetMemberPassword } from "@/app/actions/submit";
+import { createStaffMember, toggleMemberActive, resetMemberPassword, saveStaffSalary } from "@/app/actions/submit";
 
 interface StaffMember {
   id: string;
@@ -12,11 +12,13 @@ interface StaffMember {
   active: boolean;
   created_at: string | null;
   isLegacy: boolean;
+  base_salary?: number;
 }
 
 interface Props {
   staff: StaffMember[];
   canEdit: boolean;
+  salaryMap?: Record<string, number>;  // login_id → base_salary (원 단위)
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -35,7 +37,7 @@ const ROLE_BADGE: Record<string, string> = {
 
 type FilterTab = "all" | "manager" | "worker";
 
-export default function StaffManager({ staff, canEdit }: Props) {
+export default function StaffManager({ staff, canEdit, salaryMap }: Props) {
   const [filter, setFilter] = useState<FilterTab>("all");
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -48,6 +50,8 @@ export default function StaffManager({ staff, canEdit }: Props) {
   const dbCount       = staff.filter(m => !m.isLegacy).length;
   const legacyCount   = staff.filter(m => m.isLegacy).length;
   const inactiveCount = staff.filter(m => !m.active).length;
+  const salarySetCount   = staff.filter(m => (m.base_salary ?? 0) > 0).length;
+  const salaryUnsetCount = staff.length - salarySetCount;
 
   // 필터링
   const filtered = staff.filter(m => {
@@ -104,6 +108,25 @@ export default function StaffManager({ staff, canEdit }: Props) {
     });
   }
 
+  function handleSaveSalary(member: StaffMember) {
+    const input = prompt(`${member.name}의 기본급을 입력하세요 (만원 단위):`);
+    if (!input) return;
+    const newBaseSalary = Number(input);
+    if (isNaN(newBaseSalary) || newBaseSalary < 0) {
+      alert("올바른 금액을 입력하세요.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await saveStaffSalary(member.login_id, member.name, member.dept, newBaseSalary * 10000);
+      if (result.error) {
+        setActionMsg(`오류: ${result.error}`);
+      } else {
+        setActionMsg(`${member.name} 기본급이 저장되었습니다`);
+        setTimeout(() => setActionMsg(null), 2500);
+      }
+    });
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* 액션 알림 */}
@@ -114,12 +137,14 @@ export default function StaffManager({ staff, canEdit }: Props) {
       )}
 
       {/* 요약 카드 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
-          { label: "전체 직원",    value: totalCount,    color: "text-gray-800" },
-          { label: "DB 등록",      value: dbCount,       color: "text-blue-700" },
-          { label: "레거시(코드)", value: legacyCount,   color: "text-gray-500" },
-          { label: "비활성",       value: inactiveCount, color: "text-red-600"  },
+          { label: "전체 직원",      value: totalCount,      color: "text-gray-800" },
+          { label: "DB 등록",        value: dbCount,         color: "text-blue-700" },
+          { label: "레거시(코드)",   value: legacyCount,     color: "text-gray-500" },
+          { label: "비활성",         value: inactiveCount,   color: "text-red-600"  },
+          { label: "기본급 설정완료", value: salarySetCount,  color: "text-emerald-700" },
+          { label: "미설정",         value: salaryUnsetCount, color: "text-amber-600" },
         ].map(card => (
           <div key={card.label} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
             <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
@@ -262,6 +287,7 @@ export default function StaffManager({ staff, canEdit }: Props) {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">아이디</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">부서</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">역할</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">기본급</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">소스</th>
                 {canEdit && (
                   <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">관리</th>
@@ -271,7 +297,7 @@ export default function StaffManager({ staff, canEdit }: Props) {
             <tbody className="divide-y divide-gray-50">
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={canEdit ? 6 : 5} className="px-4 py-8 text-center text-gray-400 text-sm">
+                  <td colSpan={canEdit ? 7 : 6} className="px-4 py-8 text-center text-gray-400 text-sm">
                     해당하는 직원이 없습니다
                   </td>
                 </tr>
@@ -301,6 +327,30 @@ export default function StaffManager({ staff, canEdit }: Props) {
                     <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full ${ROLE_BADGE[member.role] ?? "bg-gray-100 text-gray-600"}`}>
                       {ROLE_LABEL[member.role] ?? member.role}
                     </span>
+                  </td>
+
+                  {/* 기본급 */}
+                  <td className="px-4 py-3 hidden sm:table-cell">
+                    <div className="flex items-center gap-1.5">
+                      {(member.base_salary ?? 0) > 0 ? (
+                        <span className="text-sm text-gray-700">
+                          {((member.base_salary ?? 0) / 10000).toLocaleString()}만원
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-400">미설정</span>
+                      )}
+                      {canEdit && !member.isLegacy && (
+                        <button
+                          type="button"
+                          onClick={() => handleSaveSalary(member)}
+                          disabled={isPending}
+                          className="text-gray-400 hover:text-gray-600 disabled:opacity-50 transition-colors"
+                          title="기본급 수정"
+                        >
+                          ✏️
+                        </button>
+                      )}
+                    </div>
                   </td>
 
                   {/* 소스 배지 */}
@@ -368,6 +418,19 @@ export default function StaffManager({ staff, canEdit }: Props) {
           </div>
         )}
       </div>
+
+      {/* 급여 관리 바로가기 */}
+      {canEdit && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-amber-800">💴 이번달 급여 입력</div>
+            <div className="text-xs text-amber-600 mt-0.5">월별 연장수당·상여 입력 → CEO 인건비 KPI 반영</div>
+          </div>
+          <a href="/payroll" className="text-sm bg-amber-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-amber-700 transition-colors">
+            급여 입력 →
+          </a>
+        </div>
+      )}
     </div>
   );
 }

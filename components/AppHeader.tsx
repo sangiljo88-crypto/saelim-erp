@@ -125,6 +125,11 @@ export default async function AppHeader({ session, subtitle }: { session: Sessio
           </a>
         )}
         {session.role === "coo" && (
+          <a href="/payroll" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
+            💴 급여
+          </a>
+        )}
+        {session.role === "coo" && (
           <a
             href="/briefings/new"
             className="text-xs bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg transition-colors shrink-0 font-semibold"
