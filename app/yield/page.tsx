@@ -26,7 +26,7 @@ export default async function YieldPage() {
       .gt("sale_price", 0),
   ]);
 
-  // product_id → sale_price 맵 생성 (unit=kg인 품목만 직접 적용)
+  // product_id → sale_price 맵
   const priceById: Record<string, number> = {};
   const priceByName: Record<string, number> = {};
   for (const p of products ?? []) {
@@ -34,6 +34,38 @@ export default async function YieldPage() {
       priceById[p.id] = p.sale_price;
       priceByName[p.name] = p.sale_price;
     }
+  }
+
+  // 부분 매칭: production_logs의 품목명이 products 테이블과 다를 때 키워드로 연결
+  // ex) "돼지 머리" → 머리류 평균가, "돼지 뼈" → 뼈류 대표가
+  const keywordPriceMap: Record<string, number> = {};
+  if (products && products.length > 0) {
+    const grouped: Record<string, number[]> = {};
+    for (const p of products) {
+      if (p.sale_price > 0 && p.unit === "kg") {
+        // 대분류 키워드 추출 (괄호 앞 단어들)
+        const keywords = p.name.replace(/\s*\(.*?\)/g, "").trim().split(/\s+/);
+        for (const kw of keywords) {
+          if (kw.length >= 2) {
+            if (!grouped[kw]) grouped[kw] = [];
+            grouped[kw].push(p.sale_price);
+          }
+        }
+      }
+    }
+    // 키워드별 평균 단가
+    for (const [kw, prices] of Object.entries(grouped)) {
+      keywordPriceMap[kw] = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+    }
+    // 자주 쓰이는 합성어 추가
+    keywordPriceMap["머리"]     ??= keywordPriceMap["통머리"] ?? 5000;
+    keywordPriceMap["뼈"]       ??= 1800;
+    keywordPriceMap["껍데기"]   ??= 2800;
+    keywordPriceMap["내장"]     ??= 3500;
+    keywordPriceMap["족발"]     ??= 6800;
+    keywordPriceMap["막창"]     ??= 6500;
+    keywordPriceMap["소장"]     ??= 2500;
+    keywordPriceMap["대장"]     ??= 2200;
   }
 
   return (
@@ -44,7 +76,7 @@ export default async function YieldPage() {
           <h1 className="text-lg font-bold text-gray-800">📊 수율 현황 대시보드</h1>
           <p className="text-sm text-gray-500 mt-0.5">생산 수율 추이 · 품목별 분석 · 이슈 추적</p>
         </div>
-        <YieldDashboard logs={logs ?? []} priceById={priceById} priceByName={priceByName} />
+        <YieldDashboard logs={logs ?? []} priceById={priceById} priceByName={priceByName} keywordPriceMap={keywordPriceMap} />
       </main>
     </div>
   );

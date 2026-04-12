@@ -48,9 +48,17 @@ function formatWon(amount: number) {
   return `${amount.toLocaleString()}원`;
 }
 
-function getPrice(log: Log, priceById: Record<string, number>, priceByName: Record<string, number>): number {
+function getPrice(
+  log: Log,
+  priceById: Record<string, number>,
+  priceByName: Record<string, number>,
+  keywordPriceMap: Record<string, number> = {},
+): number {
   if (log.product_id && priceById[log.product_id]) return priceById[log.product_id];
   if (priceByName[log.product_name]) return priceByName[log.product_name];
+  for (const [kw, price] of Object.entries(keywordPriceMap)) {
+    if (log.product_name.includes(kw)) return price;
+  }
   return 0;
 }
 
@@ -58,10 +66,12 @@ export default function YieldDashboard({
   logs,
   priceById = {},
   priceByName = {},
+  keywordPriceMap = {},
 }: {
   logs: Log[];
   priceById?: Record<string, number>;
   priceByName?: Record<string, number>;
+  keywordPriceMap?: Record<string, number>;
 }) {
   const [periodDays, setPeriodDays] = useState<7 | 14 | 30>(7);
 
@@ -116,13 +126,13 @@ export default function YieldDashboard({
   const totalLossAmount = useMemo(() =>
     filtered.reduce((sum, l) => {
       const loss = (l.input_qty || 0) - (l.output_qty || 0);
-      const price = getPrice(l, priceById, priceByName);
+      const price = getPrice(l, priceById, priceByName, keywordPriceMap);
       return sum + (loss > 0 && price > 0 ? loss * price : 0);
     }, 0),
   [filtered, priceById, priceByName]);
 
   const hasPriceData = useMemo(() =>
-    filtered.some((l) => getPrice(l, priceById, priceByName) > 0),
+    filtered.some((l) => getPrice(l, priceById, priceByName, keywordPriceMap) > 0),
   [filtered, priceById, priceByName]);
 
   // 이전 기간 비교
@@ -300,7 +310,7 @@ export default function YieldDashboard({
               <div className="flex flex-col gap-2">
                 {issues.map((l, i) => {
                   const loss = (l.input_qty || 0) - (l.output_qty || 0);
-                  const price = getPrice(l, priceById, priceByName);
+                  const price = getPrice(l, priceById, priceByName, keywordPriceMap);
                   const lossAmt = loss > 0 && price > 0 ? loss * price : 0;
                   return (
                     <div key={i} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
