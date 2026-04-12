@@ -926,3 +926,62 @@ export async function bulkUpdateBaseSalaries(
   revalidatePath("/payroll");
   return { success: true };
 }
+
+// ── 원재료 매입 입고 기록 (COO/manager) ──────────────────────
+export async function recordMaterialPurchase(data: {
+  purchase_date: string;
+  material_name: string;
+  product_code:  string | null;
+  supplier:      string;
+  quantity:      number;
+  unit:          string;
+  unit_price:    number;
+  invoice_no:    string;
+  notes:         string;
+}) {
+  const session = await getSession();
+  if (!session || (session.role !== "coo" && session.role !== "manager")) {
+    return { error: "COO/팀장 권한 필요" };
+  }
+
+  const db         = createServerClient();
+  const total_cost = Math.round(data.quantity * data.unit_price);
+
+  const { error } = await db.from("material_purchases").insert({
+    ...data,
+    total_cost,
+    remaining_qty: data.quantity,   // 최초 입고 시 잔여 = 전체
+    recorded_by:   session.name,
+  });
+
+  if (error) return { error: error.message };
+
+  // products.purchase_price 최신 단가로 자동 업데이트 (있는 경우)
+  if (data.product_code) {
+    await db
+      .from("products")
+      .update({ purchase_price: data.unit_price, updated_at: new Date().toISOString() })
+      .eq("code", data.product_code);
+  }
+
+  revalidatePath("/purchases");
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+// ── 매입 배치 잔여수량 수정 (COO 전용) ───────────────────────
+export async function updatePurchaseRemaining(id: string, remaining_qty: number) {
+  const session = await getSession();
+  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (remaining_qty < 0) return { error: "잔여수량은 0 이상" };
+
+  const db = createServerClient();
+  const { error } = await db
+    .from("material_purchases")
+    .update({ remaining_qty })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/purchases");
+  return { success: true };
+}

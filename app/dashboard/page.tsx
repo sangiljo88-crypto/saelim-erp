@@ -91,6 +91,9 @@ export default async function DashboardPage({
 
   const db    = createServerClient();
   const today = new Date().toISOString().split("T")[0];
+  const thisMonth = today.slice(0, 7);
+  const [y, m] = thisMonth.split("-").map(Number);
+  const nextMonthStart = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
 
   const [
     { data: dbActionItems },
@@ -104,6 +107,8 @@ export default async function DashboardPage({
     { data: chartKpiRows },
     { count: openMaintenanceCount },
     { data: utilityRecent },
+    { data: materialPurchases },
+    { data: payrollData },
   ] = await Promise.all([
     db.from("action_items").select("id,title,dept,deadline,status").order("deadline"),
 
@@ -156,6 +161,17 @@ export default async function DashboardPage({
       .select("log_month,total_cost")
       .order("log_month", { ascending: false })
       .limit(3),
+
+    // 이번달 원재료 매입 원가
+    db.from("material_purchases")
+      .select("total_cost, remaining_qty, quantity")
+      .gte("purchase_date", `${thisMonth}-01`)
+      .lt("purchase_date", nextMonthStart),
+
+    // 이번달 인건비
+    db.from("payroll_records")
+      .select("total_pay")
+      .eq("year_month", thisMonth),
   ]);
 
   // ── KPI 집계 ─────────────────────────────────────────────
@@ -262,6 +278,19 @@ export default async function DashboardPage({
     }
   }
 
+  // ── 손익 계산 ─────────────────────────────────────────────
+  const totalMaterialCost = (materialPurchases ?? []).reduce((s, p) => s + (p.total_cost || 0), 0);
+  const totalLaborCost    = (payrollData ?? []).reduce((s, p) => s + (p.total_pay || 0), 0);
+
+  // 이번달 매출 (monthly_kpi revenue, thisMonth 기준)
+  const monthRevenue = (kpiRows ?? [])
+    .filter((r) => r.kpi_key === "revenue" && r.year_month === thisMonth)
+    .reduce((s, r) => s + (r.actual ?? 0), 0);
+
+  // 유틸리티 이번달 비용
+  const utilityThisMonth = (utilityRecent ?? []).find((l) => l.log_month === thisMonth);
+  const utilityThisMonthCost = utilityThisMonth?.total_cost ?? 0;
+
   const isSingleMonth = months.length === 1;
 
   return (
@@ -365,6 +394,67 @@ export default async function DashboardPage({
               icon="🏭"
               isGood={(avgYield ?? kpiData.yieldRate.actual) >= kpiData.yieldRate.target}
             />
+          </div>
+        </section>
+
+        {/* 이번달 손익 현황 */}
+        <section className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="text-sm font-bold text-gray-700 mb-4">📊 {thisMonth.replace("-","년 ")}월 손익 현황</div>
+          <div className="flex flex-col gap-2">
+            {/* 매출 */}
+            <div className="flex items-center justify-between py-2 border-b border-gray-50">
+              <span className="text-sm text-gray-600">🚚 매출</span>
+              <span className="font-bold text-gray-800">
+                {monthRevenue > 0 ? `${(monthRevenue / 10000).toLocaleString()}만원` : "—"}
+              </span>
+            </div>
+            {/* 원재료 매입원가 */}
+            <div className="flex items-center justify-between py-2 border-b border-gray-50">
+              <span className="text-sm text-gray-600">📦 원재료 매입원가</span>
+              <span className={`font-bold ${totalMaterialCost > 0 ? "text-red-600" : "text-gray-300"}`}>
+                {totalMaterialCost > 0 ? `- ${(totalMaterialCost / 10000).toLocaleString()}만원` : "미입력"}
+              </span>
+            </div>
+            {/* 인건비 */}
+            <div className="flex items-center justify-between py-2 border-b border-gray-50">
+              <span className="text-sm text-gray-600">👥 인건비</span>
+              <span className={`font-bold ${totalLaborCost > 0 ? "text-red-600" : "text-gray-300"}`}>
+                {totalLaborCost > 0 ? `- ${(totalLaborCost / 10000).toLocaleString()}만원` : "미입력"}
+              </span>
+            </div>
+            {/* 유틸리티 */}
+            <div className="flex items-center justify-between py-2 border-b border-gray-50">
+              <span className="text-sm text-gray-600">⚡ 유틸리티</span>
+              <span className={`font-bold ${utilityThisMonthCost > 0 ? "text-red-600" : "text-gray-300"}`}>
+                {utilityThisMonthCost > 0 ? `- ${(utilityThisMonthCost / 10000).toLocaleString()}만원` : "미입력"}
+              </span>
+            </div>
+            {/* 영업이익 */}
+            {monthRevenue > 0 && (
+              (() => {
+                const knownCosts      = totalMaterialCost + totalLaborCost + utilityThisMonthCost;
+                const operatingProfit = monthRevenue - knownCosts;
+                const margin          = monthRevenue > 0 ? ((operatingProfit / monthRevenue) * 100).toFixed(1) : "0";
+                return (
+                  <div className={`flex items-center justify-between py-3 px-3 rounded-xl mt-1 ${operatingProfit >= 0 ? "bg-emerald-50 border border-emerald-100" : "bg-red-50 border border-red-100"}`}>
+                    <span className={`text-sm font-bold ${operatingProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                      {operatingProfit >= 0 ? "✅ 영업이익 (추정)" : "⚠️ 영업손실 (추정)"}
+                    </span>
+                    <div className="text-right">
+                      <div className={`font-bold text-lg ${operatingProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                        {(operatingProfit / 10000).toLocaleString()}만원
+                      </div>
+                      <div className="text-xs text-gray-400">이익률 {margin}%</div>
+                    </div>
+                  </div>
+                );
+              })()
+            )}
+            {monthRevenue === 0 && (
+              <div className="text-xs text-gray-400 text-center py-2">
+                이달 납품전표를 입력하면 손익이 계산됩니다
+              </div>
+            )}
           </div>
         </section>
 
