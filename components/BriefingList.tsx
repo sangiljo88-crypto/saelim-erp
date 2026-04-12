@@ -15,21 +15,31 @@ export interface BriefingSummary {
 }
 
 const DEPT_FILTERS = [
-  "전체", "업계동향", "현장팀", "물류팀", "품질CS팀", "영업마케팅팀", "경영지원팀",
+  "전체", "전체공지", "업계동향",
+  "생산팀", "가공팀", "스킨팀", "재고팀", "품질팀",
+  "배송팀", "CS팀", "마케팅팀", "회계팀", "온라인팀", "개발팀",
 ] as const;
 type DeptFilter = (typeof DEPT_FILTERS)[number];
 
 export const DEPT_META: Record<string, { label: string; color: string; dot: string }> = {
-  "all":         { label: "전체 공지",    color: "bg-gray-100 text-gray-700",         dot: "bg-gray-400" },
-  "업계동향":    { label: "업계동향",     color: "bg-blue-100 text-blue-700",          dot: "bg-blue-500" },
-  "현장팀":      { label: "현장팀",       color: "bg-orange-100 text-orange-700",      dot: "bg-orange-500" },
-  "물류팀":      { label: "물류팀",       color: "bg-sky-100 text-sky-700",            dot: "bg-sky-500" },
-  "품질CS팀":    { label: "품질CS팀",     color: "bg-purple-100 text-purple-700",      dot: "bg-purple-500" },
-  "영업마케팅팀": { label: "영업마케팅팀", color: "bg-emerald-100 text-emerald-700",   dot: "bg-emerald-500" },
-  "경영지원팀":  { label: "경영지원팀",   color: "bg-rose-100 text-rose-700",          dot: "bg-rose-500" },
+  // 특수 카테고리
+  "all":      { label: "전체 공지",  color: "bg-red-100 text-red-700",        dot: "bg-red-500" },
+  "업계동향": { label: "업계동향",   color: "bg-blue-100 text-blue-700",      dot: "bg-blue-500" },
+  // 부서 카테고리 (실제 DB 값과 일치)
+  "생산팀":   { label: "생산팀",     color: "bg-indigo-100 text-indigo-700",  dot: "bg-indigo-500" },
+  "가공팀":   { label: "가공팀",     color: "bg-orange-100 text-orange-700",  dot: "bg-orange-500" },
+  "스킨팀":   { label: "스킨팀",     color: "bg-pink-100 text-pink-700",      dot: "bg-pink-500" },
+  "재고팀":   { label: "재고팀",     color: "bg-amber-100 text-amber-700",    dot: "bg-amber-500" },
+  "품질팀":   { label: "품질팀",     color: "bg-purple-100 text-purple-700",  dot: "bg-purple-500" },
+  "배송팀":   { label: "배송팀",     color: "bg-sky-100 text-sky-700",        dot: "bg-sky-500" },
+  "CS팀":     { label: "CS팀",       color: "bg-emerald-100 text-emerald-700",dot: "bg-emerald-500" },
+  "마케팅팀": { label: "마케팅팀",   color: "bg-green-100 text-green-700",    dot: "bg-green-500" },
+  "회계팀":   { label: "회계팀",     color: "bg-teal-100 text-teal-700",      dot: "bg-teal-500" },
+  "온라인팀": { label: "온라인팀",   color: "bg-violet-100 text-violet-700",  dot: "bg-violet-500" },
+  "개발팀":   { label: "개발팀",     color: "bg-gray-100 text-gray-700",      dot: "bg-gray-500" },
   // 레거시 값 호환
-  "market":      { label: "업계동향",     color: "bg-blue-100 text-blue-700",          dot: "bg-blue-500" },
-  "weekly":      { label: "주간브리핑",   color: "bg-emerald-100 text-emerald-700",    dot: "bg-emerald-500" },
+  "market":   { label: "업계동향",   color: "bg-blue-100 text-blue-700",      dot: "bg-blue-500" },
+  "weekly":   { label: "주간브리핑", color: "bg-emerald-100 text-emerald-700",dot: "bg-emerald-500" },
 };
 
 function getDeptLabel(cat: string) {
@@ -57,9 +67,9 @@ export default function BriefingList({
 
   const filtered = briefings.filter((b) => {
     if (filter === "전체") return true;
-    // 업계동향은 'market' 레거시 값도 포함
+    if (filter === "전체공지")  return b.category === "all";
     if (filter === "업계동향") return b.category === "업계동향" || b.category === "market";
-    return getDeptLabel(b.category) === filter || b.category === filter;
+    return b.category === filter;
   });
 
   const sorted = [...filtered].sort((a, b) => {
@@ -68,9 +78,10 @@ export default function BriefingList({
   });
 
   function countFor(dept: DeptFilter) {
-    if (dept === "전체") return briefings.length;
+    if (dept === "전체")    return briefings.length;
+    if (dept === "전체공지") return briefings.filter((b) => b.category === "all").length;
     if (dept === "업계동향") return briefings.filter((b) => b.category === "업계동향" || b.category === "market").length;
-    return briefings.filter((b) => getDeptLabel(b.category) === dept || b.category === dept).length;
+    return briefings.filter((b) => b.category === dept).length;
   }
 
   async function handlePin(id: string, current: boolean) {
@@ -102,6 +113,7 @@ export default function BriefingList({
         {DEPT_FILTERS.map((dept) => {
           const active = filter === dept;
           const cnt = countFor(dept);
+          const empty = dept !== "전체" && cnt === 0;
           return (
             <button
               key={dept}
@@ -109,11 +121,13 @@ export default function BriefingList({
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 active
                   ? "bg-[#1F3864] text-white shadow"
+                  : empty
+                  ? "bg-white border border-gray-100 text-gray-300"
                   : "bg-white border border-gray-200 text-gray-600 hover:border-[#1F3864]"
               }`}
             >
-              {dept}
-              <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"}`}>
+              {dept === "전체공지" ? "📢 전체공지" : dept === "업계동향" ? "🌐 업계동향" : dept}
+              <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${active ? "bg-white/20 text-white" : empty ? "bg-gray-50 text-gray-300" : "bg-gray-100 text-gray-500"}`}>
                 {cnt}
               </span>
             </button>
