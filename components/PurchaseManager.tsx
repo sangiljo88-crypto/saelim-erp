@@ -151,9 +151,28 @@ export default function PurchaseManager({
   // 소비 시뮬레이터: { [material_name]: qty }
   const [simQty, setSimQty] = useState<Record<string, number>>({});
 
-  // fifoStocks를 material_name별로 그룹핑 (이미 purchase_date ASC, created_at ASC 정렬됨)
+  // FIFO 원본 데이터: fifoStocks(전체기간 DB조회) 우선, 없으면 현재기간 purchases로 fallback
+  const fifoSource: FifoStock[] =
+    fifoStocks.length > 0
+      ? fifoStocks
+      : purchases.map((p) => ({
+          id:            p.id,
+          purchase_date: p.purchase_date,
+          created_at:    p.created_at,
+          material_name: p.material_name,
+          unit_price:    p.unit_price,
+          quantity:      p.quantity,
+          remaining_qty: p.remaining_qty,
+          unit:          p.unit,
+          supplier:      p.supplier,
+        }));
+
+  // material_name별로 그룹핑 (purchase_date ASC, created_at ASC → 선입선출 순서)
   const fifoGroups: Record<string, PurchaseBatch[]> = {};
-  for (const s of fifoStocks) {
+  for (const s of [...fifoSource].sort((a, b) => {
+    const d = a.purchase_date.localeCompare(b.purchase_date);
+    return d !== 0 ? d : (a.created_at ?? "").localeCompare(b.created_at ?? "");
+  })) {
     if (!fifoGroups[s.material_name]) fifoGroups[s.material_name] = [];
     fifoGroups[s.material_name].push({
       id:            s.id,
