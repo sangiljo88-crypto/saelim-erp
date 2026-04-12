@@ -26,6 +26,7 @@ export default async function PurchasesPage({ searchParams }: Props) {
     { data: purchases },
     { data: products },
     { data: supplierRows },
+    { data: fifoRows },
   ] = await Promise.all([
     db.from("material_purchases")
       .select("id, purchase_date, material_name, product_code, supplier, quantity, unit, unit_price, total_cost, remaining_qty, invoice_no, notes, recorded_by, created_at")
@@ -46,6 +47,13 @@ export default async function PurchasesPage({ searchParams }: Props) {
       .select("supplier")
       .not("supplier", "is", null)
       .neq("supplier", ""),
+
+    // FIFO 재고: 잔여 있는 모든 배치 (기간 무관, 오래된 것 먼저)
+    db.from("material_purchases")
+      .select("id, purchase_date, created_at, material_name, unit_price, quantity, remaining_qty, unit, supplier")
+      .gt("remaining_qty", 0)
+      .order("purchase_date", { ascending: true })
+      .order("created_at",    { ascending: true }),
   ]);
 
   const all = purchases ?? [];
@@ -98,6 +106,7 @@ export default async function PurchasesPage({ searchParams }: Props) {
           purchases={all}
           products={products ?? []}
           suppliers={existingSuppliers}
+          fifoStocks={fifoRows ?? []}
           materialTotals={materialTotals}
           initialFrom={from}
           initialTo={to}

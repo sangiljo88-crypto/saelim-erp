@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { recordMaterialPurchase, updatePurchaseRemaining } from "@/app/actions/submit";
+import { calculateFifo, calculateWeightedAvg, type PurchaseBatch } from "@/lib/fifo";
 
 interface Purchase {
   id: string;
@@ -28,10 +29,23 @@ interface Product {
   unit: string;
 }
 
+interface FifoStock {
+  id: string;
+  purchase_date: string;
+  created_at: string;
+  material_name: string;
+  unit_price: number;
+  quantity: number;
+  remaining_qty: number;
+  unit: string;
+  supplier: string | null;
+}
+
 interface Props {
   purchases: Purchase[];
   products: Product[];
   suppliers: string[];
+  fifoStocks: FifoStock[];
   materialTotals: Record<string, { cost: number; qty: number; unit: string }>;
   initialFrom: string;
   initialTo: string;
@@ -81,10 +95,21 @@ function remainingLabel(ratio: number) {
   return { text: "신규", cls: "text-emerald-500" };
 }
 
+// FIFO 배치 색상 팔레트 (단가 구간별 시각화)
+const BATCH_COLORS = [
+  "bg-[#1F3864]", "bg-blue-500", "bg-indigo-400",
+  "bg-violet-400", "bg-purple-400", "bg-fuchsia-400",
+];
+const BATCH_TEXT_COLORS = [
+  "text-[#1F3864]", "text-blue-600", "text-indigo-600",
+  "text-violet-600", "text-purple-600", "text-fuchsia-600",
+];
+
 export default function PurchaseManager({
   purchases: initialPurchases,
   products,
   suppliers: dbSuppliers,
+  fifoStocks,
   materialTotals,
   initialFrom,
   initialTo,
@@ -110,6 +135,26 @@ export default function PurchaseManager({
   const [editErr, setEditErr]       = useState("");
 
   const today = new Date().toISOString().split("T")[0];
+
+  // FIFO 현황 섹션 토글
+  const [showFifo, setShowFifo] = useState(true);
+  // 소비 시뮬레이터: { [material_name]: qty }
+  const [simQty, setSimQty] = useState<Record<string, number>>({});
+
+  // fifoStocks를 material_name별로 그룹핑 (이미 purchase_date ASC, created_at ASC 정렬됨)
+  const fifoGroups: Record<string, PurchaseBatch[]> = {};
+  for (const s of fifoStocks) {
+    if (!fifoGroups[s.material_name]) fifoGroups[s.material_name] = [];
+    fifoGroups[s.material_name].push({
+      id:            s.id,
+      purchase_date: s.purchase_date,
+      created_at:    s.created_at,
+      material_name: s.material_name,
+      unit_price:    s.unit_price,
+      quantity:      s.quantity,
+      remaining_qty: s.remaining_qty,
+    });
+  }
 
   // 공급업체 목록 (DB 기존 + 기본값 합치기, 중복 제거)
   const allSuppliers = Array.from(new Set([...DEFAULT_SUPPLIERS, ...dbSuppliers])).sort();
@@ -303,6 +348,177 @@ export default function PurchaseManager({
           )}
         </div>
       </div>
+
+      {/* ── FIFO 원가 현황 ─────────────────────────── */}
+      {Object.keys(fifoGroups).length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {/* 헤더 */}
+          <button
+            type="button"
+            onClick={() => setShowFifo(!showFifo)}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-gray-700">📊 FIFO 원가 현황</span>
+              <span className="text-xs bg-[#1F3864]/10 text-[#1F3864] px-2 py-0.5 rounded-full font-semibold">
+                {Object.keys(fifoGroups).length}개 품목 잔여
+              </span>
+            </div>
+            <span className="text-xs text-gray-400">{showFifo ? "▲ 접기" : "▼ 펼치기"}</span>
+          </button>
+
+          {showFifo && (
+            <div className="border-t border-gray-100 divide-y divide-gray-50">
+              {Object.entries(fifoGroups).map(([material, batches]) => {
+                const unit         = fifoStocks.find((s) => s.material_name === material)?.unit ?? "";
+                const totalRemain  = batches.reduce((s, b) => s + b.remaining_qty, 0);
+                const totalQty     = batches.reduce((s, b) => s + b.quantity, 0);
+                const weightedAvg  = calculateWeightedAvg(batches);
+                const totalValue   = Math.round(totalRemain * weightedAvg);
+                const consume      = simQty[material] ?? 0;
+                const simResult    = consume > 0 ? calculateFifo(batches, consume) : null;
+
+                return (
+                  <div key={material} className="px-4 py-4">
+                    {/* 품목 헤더 */}
+                    <div className="flex items-start justify-between gap-2 mb-3 flex-wrap">
+                      <div>
+                        <span className="text-sm font-bold text-gray-800">{material}</span>
+                        <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">
+                          <span>잔여 <strong className="text-gray-700">{totalRemain.toLocaleString()}{unit}</strong></span>
+                          <span>가중평균 <strong className="text-[#1F3864]">{weightedAvg.toLocaleString()}원/{unit}</strong></span>
+                          <span>평가액 <strong className="text-gray-700">{(totalValue / 10000).toLocaleString()}만원</strong></span>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-400">{batches.length}배치</div>
+                    </div>
+
+                    {/* FIFO 배치 레이어 시각화 */}
+                    <div className="mb-3">
+                      {/* 가격 레이어 바 (너비 = 각 배치 remaining_qty 비율) */}
+                      <div className="flex h-5 rounded-lg overflow-hidden gap-px bg-gray-100">
+                        {batches.map((b, i) => {
+                          const ratio = totalRemain > 0 ? (b.remaining_qty / totalRemain) * 100 : 0;
+                          return (
+                            <div
+                              key={b.id}
+                              title={`${b.purchase_date} · ${b.remaining_qty.toLocaleString()}${unit} · ${b.unit_price.toLocaleString()}원/${unit}`}
+                              className={`${BATCH_COLORS[i % BATCH_COLORS.length]} transition-all`}
+                              style={{ width: `${ratio}%` }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 배치 목록 (FIFO 순서 = 오래된 것 먼저) */}
+                    <div className="flex flex-col gap-1.5 mb-3">
+                      {batches.map((b, i) => {
+                        const usedRatio = b.quantity > 0 ? (b.remaining_qty / b.quantity) : 0;
+                        const isFirst   = i === 0;
+                        return (
+                          <div key={b.id}
+                            className="flex items-center gap-2 text-xs flex-wrap">
+                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${BATCH_COLORS[i % BATCH_COLORS.length]}`}>
+                              {i + 1}
+                            </span>
+                            {isFirst && (
+                              <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                선입 우선
+                              </span>
+                            )}
+                            <span className="text-gray-400">{b.purchase_date}</span>
+                            <span className={`font-bold ${BATCH_TEXT_COLORS[i % BATCH_TEXT_COLORS.length]}`}>
+                              {b.unit_price.toLocaleString()}원/{unit}
+                            </span>
+                            <span className="text-gray-400">×</span>
+                            <span className="text-gray-600 font-medium">
+                              잔여 {b.remaining_qty.toLocaleString()}/{b.quantity.toLocaleString()}{unit}
+                            </span>
+                            {/* 잔여 비율 미니바 */}
+                            <div className="flex-1 min-w-[60px] max-w-[100px] h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${BATCH_COLORS[i % BATCH_COLORS.length]} opacity-60`}
+                                style={{ width: `${(usedRatio * 100).toFixed(0)}%` }}
+                              />
+                            </div>
+                            <span className="text-gray-400">
+                              = {(b.remaining_qty * b.unit_price / 10000).toLocaleString()}만원
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* 소비 시뮬레이터 */}
+                    <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-gray-500 font-medium">🔢 소비 시뮬레이터</span>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            value={simQty[material] || ""}
+                            onChange={(e) =>
+                              setSimQty((prev) => ({
+                                ...prev,
+                                [material]: Number(e.target.value) || 0,
+                              }))
+                            }
+                            placeholder="0"
+                            min={0}
+                            max={totalRemain}
+                            step="any"
+                            className="w-24 border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30 text-center"
+                          />
+                          <span className="text-xs text-gray-400">{unit} 소비 시</span>
+                        </div>
+                        {simResult && (
+                          <div className="flex items-center gap-2 flex-wrap text-xs">
+                            <span className="text-[#1F3864] font-bold">
+                              → {(simResult.totalCost / 10000).toLocaleString()}만원
+                            </span>
+                            <span className="text-gray-400">
+                              (평균 {simResult.avgUnitPrice.toLocaleString()}원/{unit})
+                            </span>
+                            {simResult.unallocated > 0 && (
+                              <span className="text-red-500">
+                                ⚠ {simResult.unallocated.toLocaleString()}{unit} 재고 부족
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 시뮬레이션 배치 내역 */}
+                      {simResult && simResult.batchDetails.length > 0 && (
+                        <div className="mt-2 flex flex-col gap-0.5 border-t border-gray-200 pt-2">
+                          {simResult.batchDetails.map((d, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs text-gray-500">
+                              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white ${BATCH_COLORS[i % BATCH_COLORS.length]}`}>
+                                {i + 1}
+                              </span>
+                              <span>{d.purchase_date}</span>
+                              <span className={`font-semibold ${BATCH_TEXT_COLORS[i % BATCH_TEXT_COLORS.length]}`}>
+                                {d.unit_price.toLocaleString()}원
+                              </span>
+                              <span>×</span>
+                              <span>{d.consumed.toLocaleString()}{unit}</span>
+                              <span className="text-gray-400">=</span>
+                              <span className="font-semibold text-gray-700">
+                                {(d.cost / 10000).toLocaleString()}만원
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 매입 등록 폼 토글 */}
       {canEdit && (

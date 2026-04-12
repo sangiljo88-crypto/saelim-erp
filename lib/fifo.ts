@@ -4,6 +4,7 @@
 export interface PurchaseBatch {
   id: string;
   purchase_date: string;
+  created_at?: string;   // 동일 날짜 시 tiebreaker
   material_name: string;
   unit_price: number;
   quantity: number;
@@ -36,10 +37,12 @@ export function calculateFifo(
   let totalCost = 0;
   const batchDetails: FifoResult["batchDetails"] = [];
 
-  // 날짜 오름차순 정렬 (가장 오래된 것 먼저)
-  const sorted = [...batches].sort((a, b) =>
-    a.purchase_date.localeCompare(b.purchase_date)
-  );
+  // 날짜 오름차순 정렬 (가장 오래된 것 먼저, 동일 날짜면 등록순)
+  const sorted = [...batches].sort((a, b) => {
+    const dateComp = a.purchase_date.localeCompare(b.purchase_date);
+    if (dateComp !== 0) return dateComp;
+    return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+  });
 
   for (const batch of sorted) {
     if (remaining <= 0) break;
