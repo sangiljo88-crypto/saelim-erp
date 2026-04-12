@@ -31,19 +31,34 @@ interface Product {
 interface Props {
   purchases: Purchase[];
   products: Product[];
+  suppliers: string[];
   materialTotals: Record<string, { cost: number; qty: number; unit: string }>;
   initialFrom: string;
   initialTo: string;
   canEdit: boolean;
 }
 
-const UNITS = ["kg", "두", "개", "장", "박스"];
+const UNITS = ["kg", "두", "개", "장", "박스", "L", "묶음"];
+
+// 원재료 입고 창고 (frozen_inventory section 기준)
+const RAW_SECTIONS = [
+  "2번냉동실",
+  "3번냉동실",
+  "(1번)왼쪽컨테이너",
+  "(2번)오른쪽컨테이너",
+  "4번냉동고(가공)",
+  "5번냉동고(발골)",
+];
+
+// 기본 공급업체 (기존에 없을 때 보여줄 기본값)
+const DEFAULT_SUPPLIERS = ["농협", "목욕촌", "한돈유통"];
 
 const EMPTY_FORM = {
   purchase_date: "",
   material_name: "",
   product_code: "",
   supplier: "",
+  storage_section: "",
   quantity: 0,
   unit: "kg",
   unit_price: 0,
@@ -69,6 +84,7 @@ function remainingLabel(ratio: number) {
 export default function PurchaseManager({
   purchases: initialPurchases,
   products,
+  suppliers: dbSuppliers,
   materialTotals,
   initialFrom,
   initialTo,
@@ -82,13 +98,21 @@ export default function PurchaseManager({
   const [saving, setSaving]       = useState(false);
   const [saveErr, setSaveErr]     = useState("");
 
+  // 원재료명 입력 모드: "select" = 기존 제품 선택 / "direct" = 직접 입력
+  const [materialMode, setMaterialMode] = useState<"select" | "direct">("select");
+  // 공급업체 입력 모드
+  const [supplierMode, setSupplierMode] = useState<"select" | "direct">("select");
+
   // 잔여수량 인라인 편집
-  const [editingId, setEditingId]       = useState<string | null>(null);
-  const [editingQty, setEditingQty]     = useState<number>(0);
-  const [editSaving, setEditSaving]     = useState(false);
-  const [editErr, setEditErr]           = useState("");
+  const [editingId, setEditingId]   = useState<string | null>(null);
+  const [editingQty, setEditingQty] = useState<number>(0);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editErr, setEditErr]       = useState("");
 
   const today = new Date().toISOString().split("T")[0];
+
+  // 공급업체 목록 (DB 기존 + 기본값 합치기, 중복 제거)
+  const allSuppliers = Array.from(new Set([...DEFAULT_SUPPLIERS, ...dbSuppliers])).sort();
 
   // TOP3 원재료
   const top3 = Object.entries(materialTotals)
@@ -101,10 +125,16 @@ export default function PurchaseManager({
   const half      = purchases.filter((p) => p.remaining_qty > 0 && p.remaining_qty / p.quantity >= 0.5).length;
   const fresh     = purchases.filter((p) => p.remaining_qty === p.quantity).length;
 
-  // 제품 빠른선택 → form 자동채움
+  // 제품 선택 → form 자동채움
   function applyProduct(code: string) {
+    if (code === "__direct__") {
+      setMaterialMode("direct");
+      setForm((prev) => ({ ...prev, material_name: "", product_code: "" }));
+      return;
+    }
     const found = products.find((p) => p.code === code);
     if (!found) return;
+    setMaterialMode("select");
     setForm((prev) => ({
       ...prev,
       material_name: found.name,
@@ -113,6 +143,17 @@ export default function PurchaseManager({
       unit_price:    found.purchase_price || 0,
       total_cost:    (found.purchase_price || 0) * (prev.quantity || 0),
     }));
+  }
+
+  // 공급업체 선택
+  function applySupplier(value: string) {
+    if (value === "__direct__") {
+      setSupplierMode("direct");
+      setForm((prev) => ({ ...prev, supplier: "" }));
+    } else {
+      setSupplierMode("select");
+      setForm((prev) => ({ ...prev, supplier: value }));
+    }
   }
 
   function handleQtyOrPrice(field: "quantity" | "unit_price", value: number) {
@@ -133,15 +174,16 @@ export default function PurchaseManager({
     setSaveErr("");
     try {
       const res = await recordMaterialPurchase({
-        purchase_date: form.purchase_date,
-        material_name: form.material_name,
-        product_code:  form.product_code  || null,
-        supplier:      form.supplier      || "",
-        quantity:      form.quantity,
-        unit:          form.unit,
-        unit_price:    form.unit_price,
-        invoice_no:    form.invoice_no    || "",
-        notes:         form.notes         || "",
+        purchase_date:   form.purchase_date,
+        material_name:   form.material_name,
+        product_code:    form.product_code  || null,
+        supplier:        form.supplier      || "",
+        quantity:        form.quantity,
+        unit:            form.unit,
+        unit_price:      form.unit_price,
+        invoice_no:      form.invoice_no    || "",
+        notes:           form.notes         || "",
+        storage_section: form.storage_section || undefined,
       });
       if (res && "error" in res && res.error) throw new Error(res.error);
       // 로컬 state에 임시 추가
@@ -163,6 +205,8 @@ export default function PurchaseManager({
       };
       setPurchases((prev) => [newEntry, ...prev]);
       setForm({ ...EMPTY_FORM, purchase_date: today });
+      setMaterialMode("select");
+      setSupplierMode("select");
       setShowForm(false);
     } catch (err) {
       setSaveErr((err as Error).message);
@@ -217,13 +261,11 @@ export default function PurchaseManager({
 
       {/* 요약 카드 3개 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* 매입 건수 */}
         <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
           <div className="text-2xl font-bold text-[#1F3864]">{purchases.length}</div>
           <div className="text-xs text-gray-500 mt-1">매입 건수</div>
         </div>
 
-        {/* 총 매입금액 */}
         <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
           <div className="text-2xl font-bold text-[#1F3864]">
             {totalCost > 0 ? `${(totalCost / 10000).toLocaleString()}만원` : "0원"}
@@ -231,7 +273,6 @@ export default function PurchaseManager({
           <div className="text-xs text-gray-500 mt-1">총 매입금액</div>
         </div>
 
-        {/* TOP3 원재료 */}
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="text-xs font-bold text-gray-600 mb-2">원재료 TOP3</div>
           {top3.length === 0 ? (
@@ -272,6 +313,8 @@ export default function PurchaseManager({
               onClick={() => {
                 setShowForm(!showForm);
                 setForm({ ...EMPTY_FORM, purchase_date: today });
+                setMaterialMode("select");
+                setSupplierMode("select");
                 setSaveErr("");
               }}
               className="flex items-center gap-1 text-xs bg-[#1F3864] text-white px-4 py-2 rounded-lg font-semibold hover:bg-[#2a4a7f] cursor-pointer"
@@ -287,34 +330,8 @@ export default function PurchaseManager({
             >
               <div className="text-sm font-bold text-[#1F3864]">📦 원재료 매입 등록</div>
 
-              {/* 제품 빠른선택 */}
-              {products.length > 0 && (
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">제품 빠른선택 (선택 시 자동 채움)</label>
-                  <select
-                    onChange={(e) => applyProduct(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
-                    defaultValue=""
-                  >
-                    <option value="">-- 제품 선택 (선택사항) --</option>
-                    {["원물", "포장재", "부자재"].map((cat) => {
-                      const catProducts = products.filter((p) => p.category === cat);
-                      if (catProducts.length === 0) return null;
-                      return (
-                        <optgroup key={cat} label={cat}>
-                          {catProducts.map((p) => (
-                            <option key={p.code} value={p.code}>
-                              {p.name} ({p.code}) · {p.purchase_price.toLocaleString()}원/{p.unit}
-                            </option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
-                  </select>
-                </div>
-              )}
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
                 {/* 구매일 */}
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">구매일 *</label>
@@ -326,40 +343,133 @@ export default function PurchaseManager({
                     required
                   />
                 </div>
+
+                {/* 입고 창고 (재고 자동 반영) */}
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">
+                    입고 창고
+                    <span className="ml-1 text-blue-400 text-[10px]">선택 시 재고 자동 반영</span>
+                  </label>
+                  <select
+                    value={form.storage_section}
+                    onChange={(e) => setForm((p) => ({ ...p, storage_section: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
+                  >
+                    <option value="">-- 미지정 (재고 미반영) --</option>
+                    {RAW_SECTIONS.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 원재료명 */}
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-gray-500 block mb-1">원재료명 *</label>
+                  {materialMode === "select" ? (
+                    <select
+                      value={
+                        products.find((p) => p.name === form.material_name)?.code ?? ""
+                      }
+                      onChange={(e) => applyProduct(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
+                    >
+                      <option value="">-- 원재료 선택 --</option>
+                      {["원물", "포장재", "부자재"].map((cat) => {
+                        const catProducts = products.filter((p) => p.category === cat);
+                        if (catProducts.length === 0) return null;
+                        return (
+                          <optgroup key={cat} label={`── ${cat} ──`}>
+                            {catProducts.map((p) => (
+                              <option key={p.code} value={p.code}>
+                                {p.name} · 기준가 {p.purchase_price.toLocaleString()}원/{p.unit}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
+                      <option value="__direct__">✏️ 직접 입력 (목록에 없음)</option>
+                    </select>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={form.material_name}
+                        onChange={(e) => setForm((p) => ({ ...p, material_name: e.target.value }))}
+                        placeholder="원재료명 직접 입력"
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
+                        autoFocus
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMaterialMode("select");
+                          setForm((p) => ({ ...p, material_name: "", product_code: "" }));
+                        }}
+                        className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 px-3 py-1.5 rounded-lg whitespace-nowrap"
+                      >
+                        목록 선택
+                      </button>
+                    </div>
+                  )}
+                  {form.product_code && materialMode === "select" && (
+                    <div className="mt-1 text-xs text-emerald-600">
+                      선택됨: {form.material_name} <span className="text-gray-400">({form.product_code})</span>
+                    </div>
+                  )}
+                </div>
+
                 {/* 공급업체 */}
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">공급업체</label>
-                  <input
-                    type="text"
-                    value={form.supplier}
-                    onChange={(e) => setForm((p) => ({ ...p, supplier: e.target.value }))}
-                    placeholder="ex) ○○ 농협, △△ 유통"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
-                  />
+                  {supplierMode === "select" ? (
+                    <select
+                      value={form.supplier}
+                      onChange={(e) => applySupplier(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
+                    >
+                      <option value="">-- 공급업체 선택 --</option>
+                      {allSuppliers.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                      <option value="__direct__">✏️ 새 공급업체 추가</option>
+                    </select>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={form.supplier}
+                        onChange={(e) => setForm((p) => ({ ...p, supplier: e.target.value }))}
+                        placeholder="공급업체명 입력"
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSupplierMode("select");
+                          setForm((p) => ({ ...p, supplier: "" }));
+                        }}
+                        className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 px-3 py-1.5 rounded-lg whitespace-nowrap"
+                      >
+                        목록 선택
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {/* 원재료명 */}
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">원재료명 *</label>
-                  <input
-                    type="text"
-                    value={form.material_name}
-                    onChange={(e) => setForm((p) => ({ ...p, material_name: e.target.value }))}
-                    placeholder="ex) 돼지 대창, 진공 파우치 소"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
-                    required
-                  />
-                </div>
-                {/* 제품코드 */}
+
+                {/* 제품코드 (자동채움 or 직접) */}
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">제품코드</label>
                   <input
                     type="text"
                     value={form.product_code}
                     onChange={(e) => setForm((p) => ({ ...p, product_code: e.target.value }))}
-                    placeholder="ex) RAW-001"
+                    placeholder="ex) RAW-001 (자동채움)"
                     className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
                   />
                 </div>
+
                 {/* 수량 */}
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">수량 *</label>
@@ -374,6 +484,7 @@ export default function PurchaseManager({
                     required
                   />
                 </div>
+
                 {/* 단위 */}
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">단위 *</label>
@@ -385,6 +496,7 @@ export default function PurchaseManager({
                     {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
                   </select>
                 </div>
+
                 {/* 단가 */}
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">단가 (원/{form.unit}) *</label>
@@ -398,13 +510,20 @@ export default function PurchaseManager({
                     required
                   />
                 </div>
+
                 {/* 총금액 자동계산 */}
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">총금액 (자동계산)</label>
                   <div className="w-full border border-blue-200 bg-blue-50 rounded-lg px-3 py-1.5 text-sm font-bold text-blue-700">
                     {form.total_cost.toLocaleString()}원
+                    {form.total_cost > 0 && (
+                      <span className="ml-2 text-xs font-normal text-blue-400">
+                        ({(form.total_cost / 10000).toFixed(1)}만원)
+                      </span>
+                    )}
                   </div>
                 </div>
+
                 {/* 거래명세서번호 */}
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">거래명세서번호</label>
@@ -416,6 +535,7 @@ export default function PurchaseManager({
                     className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
                   />
                 </div>
+
                 {/* 비고 */}
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">비고</label>
@@ -429,6 +549,12 @@ export default function PurchaseManager({
                 </div>
               </div>
 
+              {form.storage_section && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                  ✅ 저장 시 <strong>{form.storage_section}</strong>에 입고 수량 자동 반영됩니다
+                </div>
+              )}
+
               {saveErr && <p className="text-xs text-red-500">{saveErr}</p>}
 
               <button
@@ -436,7 +562,7 @@ export default function PurchaseManager({
                 disabled={saving}
                 className="self-start bg-[#1F3864] text-white text-sm font-semibold px-6 py-2 rounded-lg hover:bg-[#2a4a7f] disabled:opacity-50 cursor-pointer"
               >
-                {saving ? "저장중…" : "💾 저장"}
+                {saving ? "저장중…" : "💾 매입 저장"}
               </button>
             </form>
           )}
@@ -453,7 +579,7 @@ export default function PurchaseManager({
           {purchases.map((p) => {
             const ratio     = p.quantity > 0 ? p.remaining_qty / p.quantity : 0;
             const barColor  = remainingColor(ratio);
-            const label     = remainingLabel(ratio);
+            const lbl       = remainingLabel(ratio);
             const isEditing = editingId === p.id;
 
             return (
@@ -471,7 +597,7 @@ export default function PurchaseManager({
                           {p.product_code}
                         </span>
                       )}
-                      <span className={`text-xs font-semibold ${label.cls}`}>{label.text}</span>
+                      <span className={`text-xs font-semibold ${lbl.cls}`}>{lbl.text}</span>
                     </div>
                     <div className="text-xs text-gray-400 mt-0.5">
                       {p.purchase_date}

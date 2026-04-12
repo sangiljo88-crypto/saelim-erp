@@ -929,15 +929,16 @@ export async function bulkUpdateBaseSalaries(
 
 // ── 원재료 매입 입고 기록 (COO/manager) ──────────────────────
 export async function recordMaterialPurchase(data: {
-  purchase_date: string;
-  material_name: string;
-  product_code:  string | null;
-  supplier:      string;
-  quantity:      number;
-  unit:          string;
-  unit_price:    number;
-  invoice_no:    string;
-  notes:         string;
+  purchase_date:   string;
+  material_name:   string;
+  product_code:    string | null;
+  supplier:        string;
+  quantity:        number;
+  unit:            string;
+  unit_price:      number;
+  invoice_no:      string;
+  notes:           string;
+  storage_section?: string;   // 입고 창고 (재고 자동 반영용)
 }) {
   const session = await getSession();
   if (!session || (session.role !== "coo" && session.role !== "manager")) {
@@ -947,8 +948,9 @@ export async function recordMaterialPurchase(data: {
   const db         = createServerClient();
   const total_cost = Math.round(data.quantity * data.unit_price);
 
+  const { storage_section, ...insertData } = data;
   const { error } = await db.from("material_purchases").insert({
-    ...data,
+    ...insertData,
     total_cost,
     remaining_qty: data.quantity,   // 최초 입고 시 잔여 = 전체
     recorded_by:   session.name,
@@ -962,6 +964,35 @@ export async function recordMaterialPurchase(data: {
       .from("products")
       .update({ purchase_price: data.unit_price, updated_at: new Date().toISOString() })
       .eq("code", data.product_code);
+  }
+
+  // 재고 자동 반영 (입고 창고 선택 시 frozen_inventory.incoming_qty 업데이트)
+  if (storage_section) {
+    const { data: existing } = await db
+      .from("frozen_inventory")
+      .select("id, incoming_qty, prev_stock, usage_qty, outgoing_qty")
+      .eq("inventory_date", data.purchase_date)
+      .eq("section", storage_section)
+      .eq("product_name", data.material_name)
+      .maybeSingle();
+
+    if (existing) {
+      const newIncoming = (existing.incoming_qty || 0) + data.quantity;
+      await db.from("frozen_inventory").update({
+        incoming_qty:  newIncoming,
+        current_stock: (existing.prev_stock || 0) + newIncoming - (existing.usage_qty || 0) - (existing.outgoing_qty || 0),
+      }).eq("id", existing.id);
+    } else {
+      await db.from("frozen_inventory").insert({
+        inventory_date: data.purchase_date,
+        section:        storage_section,
+        side:           "raw",
+        product_name:   data.material_name,
+        unit:           data.unit,
+        incoming_qty:   data.quantity,
+        current_stock:  data.quantity,
+      });
+    }
   }
 
   revalidatePath("/purchases");
@@ -983,5 +1014,80 @@ export async function updatePurchaseRemaining(id: string, remaining_qty: number)
 
   if (error) return { error: error.message };
   revalidatePath("/purchases");
+  return { success: true };
+}
+
+// ── 회계: 매입 결제 등록 ─────────────────────────────────────
+export async function recordPurchasePayment(data: {
+  purchase_id?:   string;
+  payment_date:   string;
+  supplier:       string;
+  amount:         number;
+  supply_amount:  number;
+  vat_amount:     number;
+  payment_method: string;
+  bank_account:   string;
+  is_tax_invoice: boolean;
+  tax_invoice_no: string;
+  memo:           string;
+}) {
+  const session = await getSession();
+  if (!session || (session.role !== "coo" && session.role !== "ceo")) {
+    return { error: "COO/CEO 권한 필요" };
+  }
+  const db = createServerClient();
+
+  // 1. purchase_payments 저장
+  const { error } = await db.from("purchase_payments").insert({
+    ...data,
+    recorded_by: session.name,
+  });
+  if (error) return { error: error.message };
+
+  // 2. cash_flow_ledger에도 자동 기록 (매입결제 outflow)
+  await db.from("cash_flow_ledger").insert({
+    transaction_date: data.payment_date,
+    flow_type:        "outflow",
+    category:         "매입결제",
+    amount:           data.amount,
+    supply_amount:    data.supply_amount,
+    vat_amount:       data.vat_amount,
+    counterparty:     data.supplier,
+    payment_method:   data.payment_method,
+    description:      data.memo || `${data.supplier} 매입결제`,
+    is_vat_deductible: data.is_tax_invoice,
+    ref_type:         data.purchase_id ? "material_purchase" : null,
+    ref_id:           data.purchase_id || null,
+    recorded_by:      session.name,
+  });
+
+  revalidatePath("/accounting");
+  return { success: true };
+}
+
+// ── 회계: 현금흐름 항목 등록 (일반) ──────────────────────────
+export async function recordCashFlow(data: {
+  transaction_date:  string;
+  flow_type:         "inflow" | "outflow";
+  category:          string;
+  amount:            number;
+  supply_amount:     number;
+  vat_amount:        number;
+  counterparty:      string;
+  payment_method:    string;
+  description:       string;
+  is_vat_deductible: boolean;
+}) {
+  const session = await getSession();
+  if (!session || (session.role !== "coo" && session.role !== "ceo")) {
+    return { error: "COO/CEO 권한 필요" };
+  }
+  const db = createServerClient();
+  const { error } = await db.from("cash_flow_ledger").insert({
+    ...data,
+    recorded_by: session.name,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/accounting");
   return { success: true };
 }

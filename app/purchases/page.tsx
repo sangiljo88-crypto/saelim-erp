@@ -26,6 +26,7 @@ export default async function PurchasesPage({ searchParams }: Props) {
   const [
     { data: purchases },
     { data: products },
+    { data: supplierRows },
   ] = await Promise.all([
     db.from("material_purchases")
       .select("id, purchase_date, material_name, product_code, supplier, quantity, unit, unit_price, total_cost, remaining_qty, invoice_no, notes, recorded_by, created_at")
@@ -40,10 +41,21 @@ export default async function PurchasesPage({ searchParams }: Props) {
       .in("category", ["원물", "포장재", "부자재"])
       .eq("is_active", true)
       .order("category"),
+
+    // 기존 공급업체 목록 (distinct)
+    db.from("material_purchases")
+      .select("supplier")
+      .not("supplier", "is", null)
+      .neq("supplier", ""),
   ]);
 
   const all = purchases ?? [];
   const totalCost = all.reduce((s, p) => s + (p.total_cost || 0), 0);
+
+  // 기존 공급업체 목록 (중복 제거)
+  const existingSuppliers = Array.from(
+    new Set((supplierRows ?? []).map((r) => r.supplier as string).filter(Boolean))
+  ).sort();
 
   // 원재료별 집계
   const materialTotals: Record<string, { cost: number; qty: number; unit: string }> = {};
@@ -77,6 +89,7 @@ export default async function PurchasesPage({ searchParams }: Props) {
         <PurchaseManager
           purchases={all}
           products={products ?? []}
+          suppliers={existingSuppliers}
           materialTotals={materialTotals}
           initialFrom={from}
           initialTo={to}
