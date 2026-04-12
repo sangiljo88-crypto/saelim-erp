@@ -77,6 +77,11 @@ export default async function AppHeader({ session, subtitle }: { session: Sessio
         </a>
 
         {(session.role === "coo" || session.role === "ceo") && (
+          <a href="/report" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
+            📋 주간보고
+          </a>
+        )}
+        {(session.role === "coo" || session.role === "ceo") && (
           <a href="/yield" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
             📊 수율
           </a>

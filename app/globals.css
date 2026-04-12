@@ -32,3 +32,10 @@ body {
 .briefing-content td { padding: 0.4rem 0.75rem; border: 1px solid #e5e7eb; }
 .briefing-content tr:nth-child(even) td { background: #f9fafb; }
 .briefing-content blockquote { border-left: 3px solid #1F3864; padding-left: 1rem; color: #6b7280; margin: 0.75rem 0; }
+
+/* 인쇄 스타일 */
+@media print {
+  body { background: white !important; }
+  .print\:hidden { display: none !important; }
+  @page { margin: 1.5cm; size: A4; }
+}
