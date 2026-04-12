@@ -145,7 +145,10 @@ export default function BriefingList({
                     </div>
                     <div className="text-sm font-bold text-gray-800 truncate">{b.title}</div>
                     <div className="text-xs text-gray-400 mt-1">
-                      {b.author} · {b.publish_date}
+                      {b.author} · {b.publish_date}&nbsp;
+                      <span className="text-gray-300">
+                        {new Date(b.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })} 등록
+                      </span>
                     </div>
                   </div>
                   <span className="text-gray-300 text-sm shrink-0 mt-1">›</span>
