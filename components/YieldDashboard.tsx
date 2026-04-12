@@ -10,6 +10,7 @@ import {
 interface Log {
   work_date: string;
   dept: string;
+  product_id?: string;
   product_name: string;
   input_qty: number;
   output_qty: number;
@@ -41,7 +42,27 @@ function formatDate(iso: string) {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-export default function YieldDashboard({ logs }: { logs: Log[] }) {
+function formatWon(amount: number) {
+  if (amount >= 100_000_000) return `${(amount / 100_000_000).toFixed(1)}억원`;
+  if (amount >= 10_000) return `${Math.round(amount / 10_000).toLocaleString()}만원`;
+  return `${amount.toLocaleString()}원`;
+}
+
+function getPrice(log: Log, priceById: Record<string, number>, priceByName: Record<string, number>): number {
+  if (log.product_id && priceById[log.product_id]) return priceById[log.product_id];
+  if (priceByName[log.product_name]) return priceByName[log.product_name];
+  return 0;
+}
+
+export default function YieldDashboard({
+  logs,
+  priceById = {},
+  priceByName = {},
+}: {
+  logs: Log[];
+  priceById?: Record<string, number>;
+  priceByName?: Record<string, number>;
+}) {
   const [periodDays, setPeriodDays] = useState<7 | 14 | 30>(7);
 
   const cutoff = useMemo(() => {
@@ -90,6 +111,19 @@ export default function YieldDashboard({ logs }: { logs: Log[] }) {
   const belowThreshold = filtered.filter((l) => l.yield_rate < THRESHOLD).length;
   const totalInput = filtered.reduce((s, l) => s + (l.input_qty || 0), 0);
   const totalOutput = filtered.reduce((s, l) => s + (l.output_qty || 0), 0);
+
+  // 손실 금액 계산
+  const totalLossAmount = useMemo(() =>
+    filtered.reduce((sum, l) => {
+      const loss = (l.input_qty || 0) - (l.output_qty || 0);
+      const price = getPrice(l, priceById, priceByName);
+      return sum + (loss > 0 && price > 0 ? loss * price : 0);
+    }, 0),
+  [filtered, priceById, priceByName]);
+
+  const hasPriceData = useMemo(() =>
+    filtered.some((l) => getPrice(l, priceById, priceByName) > 0),
+  [filtered, priceById, priceByName]);
 
   // 이전 기간 비교
   const prevCutoff = useMemo(() => {
@@ -166,16 +200,16 @@ export default function YieldDashboard({ logs }: { logs: Log[] }) {
           <div className="text-xs text-gray-400 mt-1">기간 합계</div>
         </div>
 
-        {/* 총 산출 */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-400 mb-1">총 산출량</div>
-          <div className="text-2xl font-bold text-gray-700">
-            {hasData ? `${totalOutput.toLocaleString()}kg` : "–"}
+        {/* 손실 금액 */}
+        <div className={`bg-white rounded-xl border p-4 ${hasPriceData && totalLossAmount > 0 ? "border-red-200 bg-red-50/30" : "border-gray-200"}`}>
+          <div className="text-xs text-gray-400 mb-1">추정 손실 금액</div>
+          <div className={`text-2xl font-bold ${hasPriceData ? (totalLossAmount > 500_000 ? "text-red-500" : "text-amber-500") : "text-gray-300"}`}>
+            {!hasData ? "–" : !hasPriceData ? "단가 미설정" : formatWon(totalLossAmount)}
           </div>
           <div className="text-xs text-gray-400 mt-1">
             {hasData && totalInput > 0
-              ? `손실 ${(totalInput - totalOutput).toLocaleString()}kg`
-              : "기간 합계"}
+              ? `손실 ${(totalInput - totalOutput).toLocaleString()}kg × 판매단가`
+              : "단가 설정 시 자동 계산"}
           </div>
         </div>
       </div>
@@ -264,23 +298,33 @@ export default function YieldDashboard({ logs }: { logs: Log[] }) {
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="text-sm font-bold text-gray-700 mb-3">⚠️ 이슈 및 기준 미달 로그</div>
               <div className="flex flex-col gap-2">
-                {issues.map((l, i) => (
-                  <div key={i} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
-                    <div className={`shrink-0 text-xs font-bold px-2 py-1 rounded-full
-                      ${l.yield_rate < THRESHOLD ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>
-                      {l.yield_rate}%
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-semibold text-gray-700">
-                        {l.work_date} · {l.product_name || "미분류"} · {l.dept}
+                {issues.map((l, i) => {
+                  const loss = (l.input_qty || 0) - (l.output_qty || 0);
+                  const price = getPrice(l, priceById, priceByName);
+                  const lossAmt = loss > 0 && price > 0 ? loss * price : 0;
+                  return (
+                    <div key={i} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
+                      <div className={`shrink-0 text-xs font-bold px-2 py-1 rounded-full
+                        ${l.yield_rate < THRESHOLD ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>
+                        {l.yield_rate}%
                       </div>
-                      {l.issue_note && (
-                        <div className="text-xs text-gray-500 mt-0.5 truncate">{l.issue_note}</div>
-                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-gray-700 flex items-center gap-2 flex-wrap">
+                          {l.work_date} · {l.product_name || "미분류"} · {l.dept}
+                          {lossAmt > 0 && (
+                            <span className="text-red-500 font-bold">
+                              손실 {formatWon(lossAmt)}
+                            </span>
+                          )}
+                        </div>
+                        {l.issue_note && (
+                          <div className="text-xs text-gray-500 mt-0.5 truncate">{l.issue_note}</div>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-400 shrink-0">{l.worker_name}</div>
                     </div>
-                    <div className="text-xs text-gray-400 shrink-0">{l.worker_name}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
