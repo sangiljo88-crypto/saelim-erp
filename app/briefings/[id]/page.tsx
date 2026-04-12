@@ -29,7 +29,7 @@ export default async function BriefingDetailPage({
   const { id } = await params;
   const db = createServerClient();
 
-  const [{ data: briefing }, { data: reads }, { data: comments }] = await Promise.all([
+  const [{ data: briefing }, readsResult, commentsResult] = await Promise.all([
     db.from("briefings")
       .select("id, week_label, publish_date, category, title, content_html, author, is_pinned, created_at")
       .eq("id", id).single(),
@@ -42,6 +42,8 @@ export default async function BriefingDetailPage({
       .eq("briefing_id", id)
       .order("created_at", { ascending: true }),
   ]);
+  const reads = readsResult.data;
+  const comments = commentsResult.data;
 
   if (!briefing) notFound();
 
