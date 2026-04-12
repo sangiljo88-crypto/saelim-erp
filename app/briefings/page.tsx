@@ -23,7 +23,7 @@ export default async function BriefingsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-800">브리핑 게시판</h1>
-            <p className="text-sm text-gray-500">업계동향 · 주간브리핑 · 경영정보</p>
+            <p className="text-sm text-gray-500">업계동향 · 현장팀 · 물류팀 · 품질CS팀 · 영업마케팅팀 · 경영지원팀</p>
           </div>
           {session.role === "coo" && (
             <a

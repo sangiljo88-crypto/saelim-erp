@@ -19,8 +19,13 @@ const WEEK_LABELS = (() => {
 })();
 
 const CATEGORY_OPTIONS = [
-  { value: "market", label: "업계동향" },
-  { value: "weekly", label: "주간브리핑" },
+  { value: "업계동향",    label: "업계동향" },
+  { value: "현장팀",      label: "현장팀" },
+  { value: "물류팀",      label: "물류팀" },
+  { value: "품질CS팀",    label: "품질CS팀" },
+  { value: "영업마케팅팀", label: "영업마케팅팀" },
+  { value: "경영지원팀",  label: "경영지원팀" },
+  { value: "all",         label: "전체 공지" },
 ];
 
 const HTML_PLACEHOLDER = `<h2>주요 동향</h2>
@@ -70,7 +75,7 @@ export default function BriefingForm({
   const [form, setForm] = useState({
     week_label:   initial?.week_label   ?? defaultWeekLabel,
     publish_date: initial?.publish_date ?? now.toISOString().split("T")[0],
-    category:     initial?.category     ?? "market",
+    category:     initial?.category     ?? "업계동향",
     title:        initial?.title        ?? "",
     content_html: initial?.content_html ?? "",
     author:       initial?.author       ?? authorName,

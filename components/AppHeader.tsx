@@ -1,5 +1,6 @@
 import { logout } from "@/app/actions/auth";
 import { SessionPayload } from "@/lib/auth";
+import { createServerClient } from "@/lib/supabase";
 
 const roleLabel: Record<string, string> = {
   ceo: "대표이사",
@@ -15,7 +16,16 @@ const roleColor: Record<string, string> = {
   worker: "bg-amber-100 text-amber-700",
 };
 
-export default function AppHeader({ session, subtitle }: { session: SessionPayload; subtitle?: string }) {
+export default async function AppHeader({ session, subtitle }: { session: SessionPayload; subtitle?: string }) {
+  // 최근 7일 내 새 브리핑 여부 확인
+  const db = createServerClient();
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { count: newBriefingsCount } = await db
+    .from("briefings")
+    .select("id", { count: "exact", head: true })
+    .gte("created_at", since);
+  const hasNew = (newBriefingsCount ?? 0) > 0;
+
   return (
     <header className="bg-[#1F3864] text-white shadow-lg">
       <div className="px-4 sm:px-6 py-3.5 flex items-center justify-between">
@@ -54,41 +64,35 @@ export default function AppHeader({ session, subtitle }: { session: SessionPaylo
         >
           🏠 홈
         </a>
+
+        {/* 브리핑 — 새 글 있으면 빨간 점 */}
         <a
           href="/briefings"
-          className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0"
+          className="relative text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0"
         >
           📰 브리핑
+          {hasNew && (
+            <span className="absolute top-1 right-1 w-2 h-2 bg-red-400 rounded-full" />
+          )}
         </a>
+
         {(session.role === "coo" || session.role === "ceo") && (
-          <a
-            href="/claims"
-            className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0"
-          >
+          <a href="/claims" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
             📋 클레임
           </a>
         )}
         {(session.role === "coo" || session.role === "ceo") && (
-          <a
-            href="/inventory"
-            className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0"
-          >
+          <a href="/inventory" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
             🏭 재고
           </a>
         )}
         {(session.role === "coo" || session.role === "ceo") && (
-          <a
-            href="/maintenance"
-            className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0"
-          >
+          <a href="/maintenance" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
             🔧 설비
           </a>
         )}
         {(session.role === "coo" || session.role === "ceo") && (
-          <a
-            href="/utility"
-            className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0"
-          >
+          <a href="/utility" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
             ⚡ 유틸리티
           </a>
         )}

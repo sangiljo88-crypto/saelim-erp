@@ -5,8 +5,16 @@ import BriefingActions from "@/components/BriefingActions";
 import { createServerClient } from "@/lib/supabase";
 
 const CATEGORY_META: Record<string, { label: string; color: string }> = {
-  market: { label: "업계동향",   color: "bg-blue-100 text-blue-700" },
-  weekly: { label: "주간브리핑", color: "bg-emerald-100 text-emerald-700" },
+  "all":          { label: "전체 공지",    color: "bg-gray-100 text-gray-700" },
+  "업계동향":     { label: "업계동향",     color: "bg-blue-100 text-blue-700" },
+  "현장팀":       { label: "현장팀",       color: "bg-orange-100 text-orange-700" },
+  "물류팀":       { label: "물류팀",       color: "bg-sky-100 text-sky-700" },
+  "품질CS팀":     { label: "품질CS팀",     color: "bg-purple-100 text-purple-700" },
+  "영업마케팅팀": { label: "영업마케팅팀", color: "bg-emerald-100 text-emerald-700" },
+  "경영지원팀":   { label: "경영지원팀",   color: "bg-rose-100 text-rose-700" },
+  // 레거시
+  "market":       { label: "업계동향",     color: "bg-blue-100 text-blue-700" },
+  "weekly":       { label: "주간브리핑",   color: "bg-emerald-100 text-emerald-700" },
 };
 
 export default async function BriefingDetailPage({

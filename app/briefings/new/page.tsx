@@ -15,7 +15,7 @@ export default async function BriefingNewPage() {
         <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-lg font-bold text-gray-800">브리핑 등록</h1>
-            <p className="text-sm text-gray-500">업계동향 또는 주간브리핑 작성</p>
+            <p className="text-sm text-gray-500">팀 또는 업계동향 브리핑 작성</p>
           </div>
           <a href="/briefings" className="text-xs text-[#1F3864] hover:underline">← 목록으로</a>
         </div>
