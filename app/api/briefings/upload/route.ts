@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 
+// 빌드 시점 최적화 방지 — 환경변수를 항상 런타임에 읽도록 강제
+export const dynamic = "force-dynamic";
+
 function stripHljsSpans(html: string): string {
   return html
     .replace(/<span\s+class="hljs-[^"]*"[^>]*>/g, "")
@@ -10,7 +13,8 @@ function stripHljsSpans(html: string): string {
 
 export async function POST(req: NextRequest) {
   // ── API Key 인증 ──────────────────────────────────────────────
-  const apiKey = process.env.BRIEFING_API_KEY;
+  // 브래킷 표기법 — Next.js 빌드 시점 인라인 방지
+  const apiKey = process.env["BRIEFING_API_KEY"];
   if (!apiKey) {
     return NextResponse.json({ error: "서버 설정 오류: BRIEFING_API_KEY 미설정" }, { status: 500 });
   }
