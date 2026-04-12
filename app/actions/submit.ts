@@ -377,14 +377,45 @@ export async function submitDelivery(
   });
 
   if (error) {
-    // deliveries 테이블 미생성 안내
     const msg = error.message.includes("does not exist")
       ? "deliveries 테이블이 없습니다. Supabase에서 schema_v4.sql을 실행해주세요."
       : error.message;
     return { success: false, error: msg };
   }
 
-  try { revalidatePath("/team"); } catch {}
+  // ── CEO 매출 KPI 자동 동기화 ──────────────────────────────
+  // 납품전표 저장 즉시 해당 월의 monthly_kpi(revenue) 재집계
+  try {
+    const deliveryDate = (formData.get("delivery_date") as string) ?? new Date().toISOString().split("T")[0];
+    const yearMonth = deliveryDate.slice(0, 7);
+    const nextYM = (() => {
+      const [y, m] = yearMonth.split("-").map(Number);
+      return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+    })();
+
+    const { data: monthRows } = await db
+      .from("deliveries")
+      .select("total_amount")
+      .gte("delivery_date", `${yearMonth}-01`)
+      .lt("delivery_date", `${nextYM}-01`);
+
+    const monthRevenue = (monthRows ?? []).reduce((s, d) => s + (d.total_amount || 0), 0);
+
+    await db.from("monthly_kpi").upsert(
+      {
+        year_month: yearMonth,
+        dept:       "전사",
+        kpi_key:    "revenue",
+        actual:     monthRevenue,
+        target:     1_500_000_000, // 월 목표 15억 (연 180억 기준)
+      },
+      { onConflict: "year_month,dept,kpi_key" }
+    );
+  } catch {
+    // KPI 동기화 실패는 납품 저장 결과에 영향 주지 않음
+  }
+
+  try { revalidatePath("/team"); revalidatePath("/dashboard"); } catch {}
   return { success: true };
 }
 

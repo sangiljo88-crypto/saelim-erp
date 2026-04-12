@@ -4,18 +4,17 @@ import ActionItems, { ActionItemRow } from "@/components/ActionItems";
 import AlertPanel from "@/components/AlertPanel";
 import AppHeader from "@/components/AppHeader";
 import KPIPeriodSelector from "@/components/KPIPeriodSelector";
-import { kpiData, departments as sampleDepts, monthlyRevenue, alerts } from "@/lib/sampleData";
+import { kpiData, departments as sampleDepts } from "@/lib/sampleData";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { redirect } from "next/navigation";
 
-// ── 날짜 유틸 ───────────────────────────────────────────────
+// ── 날짜 유틸 ─────────────────────────────────────────────────
 function getDateRange(period: string, from?: string, to?: string) {
   const today = new Date().toISOString().split("T")[0];
   const now   = new Date();
   switch (period) {
-    case "today":
-      return { start: today, end: today, label: "오늘" };
+    case "today":   return { start: today, end: today, label: "오늘" };
     case "week": {
       const d = now.getDay();
       const mon = new Date(now); mon.setDate(now.getDate() - (d === 0 ? 6 : d - 1));
@@ -29,7 +28,7 @@ function getDateRange(period: string, from?: string, to?: string) {
     case "quarter": {
       const q  = Math.floor(now.getMonth() / 3);
       const sm = String(q * 3 + 1).padStart(2, "0");
-      return { start: `${now.getFullYear()}-${sm}-01`, end: today, label: `${now.getFullYear()}년 ${q+1}분기` };
+      return { start: `${now.getFullYear()}-${sm}-01`, end: today, label: `${now.getFullYear()}년 ${q + 1}분기` };
     }
     case "half": {
       const h  = now.getMonth() < 6 ? 1 : 2;
@@ -45,7 +44,6 @@ function getDateRange(period: string, from?: string, to?: string) {
   }
 }
 
-// 기간에 포함된 YYYY-MM 목록 반환
 function getMonthsInRange(start: string, end: string): string[] {
   const months: string[] = [];
   let [y, m] = start.slice(0, 7).split("-").map(Number);
@@ -57,12 +55,21 @@ function getMonthsInRange(start: string, end: string): string[] {
   return months;
 }
 
+function getLast6Months(): string[] {
+  const result: string[] = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    result.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return result;
+}
+
 const RAG_DOT:   Record<string, string> = { green: "🟢", yellow: "🟡", red: "🔴" };
 const RAG_TEXT:  Record<string, string> = { green: "정상", yellow: "주의", red: "경고" };
 const RAG_COLOR: Record<string, string> = { green: "text-emerald-600", yellow: "text-amber-600", red: "text-red-600" };
 const DEPT_ORDER = ["생산팀","가공팀","스킨팀","재고팀","품질팀","배송팀","CS팀","마케팅팀","회계팀","온라인팀","개발팀"];
 
-// 억 단위 포맷
 function fmt억(v: number) {
   if (v >= 100_000_000) return `${(v / 100_000_000).toFixed(1)}억`;
   if (v >= 10_000)      return `${Math.round(v / 10_000).toLocaleString()}만`;
@@ -79,7 +86,8 @@ export default async function DashboardPage({
 
   const { period = "month", from, to } = await searchParams;
   const { start, end, label } = getDateRange(period, from, to);
-  const months = getMonthsInRange(start, end);
+  const months      = getMonthsInRange(start, end);
+  const last6Months = getLast6Months();
 
   const db    = createServerClient();
   const today = new Date().toISOString().split("T")[0];
@@ -87,104 +95,172 @@ export default async function DashboardPage({
   const [
     { data: dbActionItems },
     { count: periodClaimsCount },
+    { count: pendingClaimsCount },
     { data: yieldRows },
     { data: prodRows },
     { count: todayProdCount },
     { data: deptReports },
     { data: kpiRows },
+    { data: chartKpiRows },
+    { count: openMaintenanceCount },
+    { data: utilityRecent },
   ] = await Promise.all([
     db.from("action_items").select("id,title,dept,deadline,status").order("deadline"),
+
     // 기간 클레임 수
     db.from("claims").select("*", { count: "exact", head: true })
       .gte("claim_date", start).lte("claim_date", end),
+
+    // 전체 미처리 클레임 수
+    db.from("claims").select("*", { count: "exact", head: true })
+      .eq("status", "pending"),
+
     // 기간 수율
     db.from("production_logs").select("yield_rate")
       .gte("work_date", start).lte("work_date", end),
+
     // 기간 생산 요약
     db.from("production_logs").select("output_qty,input_qty")
       .gte("work_date", start).lte("work_date", end),
+
     // 오늘 생산일지 수
-    db.from("production_logs").select("*", { count: "exact", head: true }).eq("work_date", today),
+    db.from("production_logs").select("*", { count: "exact", head: true })
+      .eq("work_date", today),
+
     // 부서 보고서
     db.from("dept_reports")
       .select("dept,rag_status,issue,coo_comment,manager_name,status")
       .order("report_date", { ascending: false }),
-    // monthly_kpi (선택 기간 월별)
+
+    // 기간 monthly_kpi (재무)
     db.from("monthly_kpi")
       .select("year_month,kpi_key,actual,target")
       .eq("dept", "전사")
       .in("year_month", months)
       .in("kpi_key", ["revenue","profit_margin","cash_balance","receivables"]),
+
+    // 차트용 최근 6개월 revenue kpi
+    db.from("monthly_kpi")
+      .select("year_month,actual,target")
+      .eq("dept", "전사")
+      .eq("kpi_key", "revenue")
+      .in("year_month", last6Months)
+      .order("year_month"),
+
+    // 처리중 설비 이슈 수
+    db.from("maintenance_logs").select("*", { count: "exact", head: true })
+      .eq("result", "진행중"),
+
+    // 유틸리티 최근 3개월 (비용 급증 감지)
+    db.from("utility_logs")
+      .select("log_month,total_cost")
+      .order("log_month", { ascending: false })
+      .limit(3),
   ]);
 
-  // ── monthly_kpi 집계 ──────────────────────────────────────
+  // ── KPI 집계 ─────────────────────────────────────────────
   const kpiByKey: Record<string, number[]> = {};
+  const kpiTargetByKey: Record<string, number> = {};
   for (const row of kpiRows ?? []) {
     if (!kpiByKey[row.kpi_key]) kpiByKey[row.kpi_key] = [];
     kpiByKey[row.kpi_key].push(row.actual ?? 0);
-  }
-  const kpiTargetByKey: Record<string, number> = {};
-  for (const row of kpiRows ?? []) {
     kpiTargetByKey[row.kpi_key] = row.target ?? 0;
   }
 
-  const avg = (arr: number[]) => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
-  const sum = (arr: number[]) => arr.reduce((s, v) => s + v, 0);
+  const avg  = (arr: number[]) => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+  const sum  = (arr: number[]) => arr.reduce((s, v) => s + v, 0);
   const last = (arr: number[]) => arr.length ? arr[arr.length - 1] : 0;
 
-  // 샘플데이터 스케일: period별 비율 (1개월 = 1.0, 오늘 ≈ 1/30, 이번주 = 7/30)
   function getPeriodScale(p: string, s: string, e: string): number {
     const days = Math.max(1, Math.round((new Date(e).getTime() - new Date(s).getTime()) / 86400000) + 1);
-    if (p === "today") return days / 30;
-    if (p === "week")  return days / 30;
+    if (p === "today" || p === "week") return days / 30;
     return months.length;
   }
   const periodScale = getPeriodScale(period, start, end);
 
-  // 매출: 기간 합계 (여러 달은 SUM)
   const revenue       = kpiByKey["revenue"]?.length      ? sum(kpiByKey["revenue"])      : Math.round(kpiData.revenue.actual * periodScale);
-  const revenueTarget = kpiByKey["revenue"]?.length      ? sum(kpiRows?.filter(r=>r.kpi_key==="revenue").map(r=>r.target??0) ?? []) : Math.round(kpiData.revenue.target * periodScale);
-  // 이익률: 기간 평균
+  const revenueTarget = kpiByKey["revenue"]?.length      ? sum((kpiRows ?? []).filter(r => r.kpi_key === "revenue").map(r => r.target ?? 0)) : Math.round(kpiData.revenue.target * periodScale);
   const profitMargin  = kpiByKey["profit_margin"]?.length ? avg(kpiByKey["profit_margin"]) : kpiData.profitMargin.actual;
-  // 현금잔고: 최신 월 값
   const cashBalance   = kpiByKey["cash_balance"]?.length  ? last(kpiByKey["cash_balance"]) : kpiData.cashBalance.actual;
-  // 미수금: 최신 월 값
   const receivables   = kpiByKey["receivables"]?.length   ? last(kpiByKey["receivables"])  : kpiData.receivables.actual;
+  const fromDB        = (kpiRows?.length ?? 0) > 0;
 
-  const fromDB = (kpiRows?.length ?? 0) > 0; // monthly_kpi 데이터 있는지 여부
-
-  // 수율
+  // ── 수율 ─────────────────────────────────────────────────
   const avgYield = yieldRows?.length
-    ? Math.round(yieldRows.reduce((s,r) => s+(r.yield_rate??0), 0) / yieldRows.length * 10) / 10
+    ? Math.round(yieldRows.reduce((s, r) => s + (r.yield_rate ?? 0), 0) / yieldRows.length * 10) / 10
     : null;
 
-  // 생산 요약
-  const totalOutput  = prodRows?.reduce((s,r) => s+(r.output_qty??0), 0) ?? 0;
-  const totalInput   = prodRows?.reduce((s,r) => s+(r.input_qty ??0), 0) ?? 0;
+  // ── 생산 요약 ─────────────────────────────────────────────
+  const totalOutput  = prodRows?.reduce((s, r) => s + (r.output_qty ?? 0), 0) ?? 0;
+  const totalInput   = prodRows?.reduce((s, r) => s + (r.input_qty  ?? 0), 0) ?? 0;
   const prodLogCount = prodRows?.length ?? 0;
 
-  // 부서 현황
-  const latestByDept = new Map<string, { rag_status:string; issue:string; coo_comment:string|null; manager_name:string }>();
+  // ── 부서 현황 ─────────────────────────────────────────────
+  const latestByDept = new Map<string, { rag_status: string; issue: string; coo_comment: string | null; manager_name: string }>();
   for (const r of deptReports ?? []) {
     if (!latestByDept.has(r.dept)) latestByDept.set(r.dept, r);
   }
-
   const deptStatus = DEPT_ORDER.map((name) => {
-    const db = latestByDept.get(name);
-    const sp = sampleDepts.find((d) => d.name === name);
-    return db
-      ? { name, rag_status: db.rag_status, issue: db.issue, coo_comment: db.coo_comment ?? "—", fromDB: true }
+    const dbRow = latestByDept.get(name);
+    const sp    = sampleDepts.find((d) => d.name === name);
+    return dbRow
+      ? { name, rag_status: dbRow.rag_status, issue: dbRow.issue, coo_comment: dbRow.coo_comment ?? "—", fromDB: true }
       : { name, rag_status: sp?.status ?? "green", issue: sp?.issue ?? "—", coo_comment: sp?.comment ?? "—", fromDB: false };
   });
 
+  const redCount       = deptStatus.filter((d) => d.rag_status === "red").length;
+  const yellowCount    = deptStatus.filter((d) => d.rag_status === "yellow").length;
   const actionItems: ActionItemRow[] = (dbActionItems ?? []).map((a) => ({
     id: a.id as string, title: a.title, dept: a.dept,
     deadline: a.deadline, status: a.status as ActionItemRow["status"],
   }));
-
   const delayedActions = actionItems.filter((a) => a.status === "지연").length;
-  const redCount    = deptStatus.filter((d) => d.rag_status === "red").length;
-  const yellowCount = deptStatus.filter((d) => d.rag_status === "yellow").length;
+
+  // ── 매출 추이 차트 (deliveries 자동 동기화된 monthly_kpi) ──
+  const chartKpiMap = Object.fromEntries((chartKpiRows ?? []).map((r) => [r.year_month, r]));
+  const revenueChartData = last6Months.map((ym) => ({
+    month: `${parseInt(ym.slice(5))}월`,
+    actual: chartKpiMap[ym]?.actual ?? 0,
+    target: chartKpiMap[ym]?.target ?? 1_500_000_000,
+  }));
+  const hasChartData = revenueChartData.some((d) => d.actual > 0);
+
+  // ── 동적 경고 알림 (실데이터 기반) ───────────────────────
+  const dynamicAlerts: { level: string; message: string }[] = [];
+
+  if ((pendingClaimsCount ?? 0) >= 3) {
+    dynamicAlerts.push({ level: "red", message: `미처리 클레임 ${pendingClaimsCount}건 — COO 즉시 확인 필요` });
+  } else if ((pendingClaimsCount ?? 0) > 0) {
+    dynamicAlerts.push({ level: "yellow", message: `미처리 클레임 ${pendingClaimsCount}건 처리 대기 중` });
+  }
+
+  if (avgYield !== null && avgYield < 85) {
+    dynamicAlerts.push({ level: "red", message: `수율 경고 — ${label} 평균 ${avgYield}% (기준 85% 미달)` });
+  }
+
+  if (redCount > 0) {
+    dynamicAlerts.push({ level: "red", message: `위험 상태 부서 ${redCount}곳 — 팀별 보고 즉시 확인` });
+  }
+
+  if ((openMaintenanceCount ?? 0) > 0) {
+    dynamicAlerts.push({ level: "yellow", message: `처리 중인 설비 이슈 ${openMaintenanceCount}건` });
+  }
+
+  if (delayedActions > 0) {
+    dynamicAlerts.push({ level: "yellow", message: `Action Item 지연 ${delayedActions}건` });
+  }
+
+  // 유틸리티 급증 감지 (최신 vs 전전월)
+  if (utilityRecent && utilityRecent.length >= 2) {
+    const latest = utilityRecent[0]?.total_cost ?? 0;
+    const prev   = utilityRecent[1]?.total_cost ?? 0;
+    if (prev > 0 && latest / prev >= 1.3) {
+      dynamicAlerts.push({
+        level: "yellow",
+        message: `유틸리티 비용 전월 대비 ${Math.round((latest / prev - 1) * 100)}% 급증 (${fmt억(latest)}원)`,
+      });
+    }
+  }
 
   const isSingleMonth = months.length === 1;
 
@@ -198,23 +274,19 @@ export default async function DashboardPage({
         <div className="flex flex-col gap-3">
           <KPIPeriodSelector current={period} currentFrom={from} currentTo={to} />
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="bg-[#1F3864] text-white text-xs font-semibold px-3 py-1 rounded-full">
-              {label}
-            </span>
+            <span className="bg-[#1F3864] text-white text-xs font-semibold px-3 py-1 rounded-full">{label}</span>
             <span className="text-xs text-gray-400">{start === end ? start : `${start} ~ ${end}`}</span>
             {fromDB ? (
               <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">
-                ● DB 실데이터 ({months.length}개월)
+                ● 실데이터 연동
               </span>
             ) : (
               <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
-                ⚠ 샘플 데이터 — Supabase에서 simulation_data.sql 실행 필요
+                ⚠ 납품전표 입력 시 자동 반영
               </span>
             )}
             {!isSingleMonth && months.length > 1 && (
-              <span className="text-xs text-gray-400">
-                · 매출 {months.length}개월 합계 / 이익률 평균
-              </span>
+              <span className="text-xs text-gray-400">· 매출 {months.length}개월 합계</span>
             )}
             {todayProdCount !== null && todayProdCount > 0 && (
               <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
@@ -226,26 +298,19 @@ export default async function DashboardPage({
 
         {/* 바로가기 */}
         <div className="flex gap-3 flex-wrap">
-          <a href="/products"
-            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]">
-            <span>📦</span> 품목 마스터
-          </a>
-          <a href="/claims"
-            className="flex items-center gap-2 bg-white rounded-xl border border-red-200 px-4 py-2.5 hover:bg-red-50 transition-colors text-sm font-medium text-red-700">
-            <span>📋</span> 클레임 관리
-          </a>
-          <a href="/inventory"
-            className="flex items-center gap-2 bg-white rounded-xl border border-blue-200 px-4 py-2.5 hover:bg-blue-50 transition-colors text-sm font-medium text-blue-700">
-            <span>🏭</span> 창고 재고
-          </a>
-          <a href="/maintenance"
-            className="flex items-center gap-2 bg-white rounded-xl border border-orange-200 px-4 py-2.5 hover:bg-orange-50 transition-colors text-sm font-medium text-orange-700">
-            <span>🔧</span> 설비 관리
-          </a>
-          <a href="/utility"
-            className="flex items-center gap-2 bg-white rounded-xl border border-yellow-200 px-4 py-2.5 hover:bg-yellow-50 transition-colors text-sm font-medium text-yellow-700">
-            <span>⚡</span> 유틸리티
-          </a>
+          {[
+            { href: "/report",      icon: "📋", label: "주간 보고서",  color: "border-[#1F3864]/20 text-[#1F3864] hover:bg-[#1F3864]/5" },
+            { href: "/claims",      icon: "⚠️", label: "클레임 관리",  color: "border-red-200 text-red-700 hover:bg-red-50" },
+            { href: "/yield",       icon: "📊", label: "수율 현황",    color: "border-blue-200 text-blue-700 hover:bg-blue-50" },
+            { href: "/customers",   icon: "🤝", label: "거래처 관리",  color: "border-emerald-200 text-emerald-700 hover:bg-emerald-50" },
+            { href: "/inventory",   icon: "🏭", label: "창고 재고",    color: "border-purple-200 text-purple-700 hover:bg-purple-50" },
+            { href: "/maintenance", icon: "🔧", label: "설비 관리",    color: "border-orange-200 text-orange-700 hover:bg-orange-50" },
+          ].map((link) => (
+            <a key={link.href} href={link.href}
+              className={`flex items-center gap-2 bg-white rounded-xl border px-4 py-2.5 transition-colors text-sm font-medium ${link.color}`}>
+              <span>{link.icon}</span> {link.label}
+            </a>
+          ))}
         </div>
 
         {/* ── KPI 카드 ── */}
@@ -303,13 +368,13 @@ export default async function DashboardPage({
           </div>
         </section>
 
-        {/* 기간 생산 요약 카드 */}
+        {/* 기간 생산 요약 */}
         {prodLogCount > 0 && (
           <section className="grid grid-cols-3 gap-3">
             {[
-              { label: `생산일지 (${label})`, value: `${prodLogCount}건`,                  sub: "DB 실데이터", color: "text-[#1F3864]" },
-              { label: "완성품 총 생산량",    value: `${totalOutput.toLocaleString()}kg`,  sub: "기간 합계",   color: "text-gray-800" },
-              { label: "원료 총 투입량",      value: `${totalInput.toLocaleString()}kg`,   sub: "기간 합계",   color: "text-gray-800" },
+              { label: `생산일지 (${label})`, value: `${prodLogCount}건`,               sub: "생산 기록", color: "text-[#1F3864]" },
+              { label: "완성품 생산량",        value: `${totalOutput.toLocaleString()}kg`, sub: "기간 합계", color: "text-gray-800" },
+              { label: "원료 투입량",          value: `${totalInput.toLocaleString()}kg`,  sub: "기간 합계", color: "text-gray-800" },
             ].map((c) => (
               <div key={c.label} className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="text-xs text-gray-500 mb-1">{c.label}</div>
@@ -322,13 +387,26 @@ export default async function DashboardPage({
 
         {/* 매출 추이 + 경고 알림 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-            <h2 className="text-sm font-semibold text-gray-700 mb-4">📊 월별 매출 추이 (최근 6개월)</h2>
-            <RevenueChart data={monthlyRevenue} />
+          <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-gray-700">📊 월별 매출 추이 (최근 6개월)</h2>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${hasChartData ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                {hasChartData ? "● 납품전표 실데이터" : "납품전표 입력 시 자동 반영"}
+              </span>
+            </div>
+            <RevenueChart data={revenueChartData} />
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm flex flex-col gap-3">
+
+          <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-3">
             <h2 className="text-sm font-semibold text-gray-700">🚨 경고 알림</h2>
-            <AlertPanel alerts={alerts} />
+            {dynamicAlerts.length > 0 ? (
+              <AlertPanel alerts={dynamicAlerts} />
+            ) : (
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700">
+                <span>✅</span>
+                <span>현재 주요 경고 없음</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -345,7 +423,10 @@ export default async function DashboardPage({
               <span>부서</span><span>상태</span><span>이번 주 이슈</span><span>COO 코멘트</span>
             </div>
             {deptStatus.map((d, i) => (
-              <div key={d.name} className={`grid grid-cols-[120px_80px_1fr_1fr] items-start gap-4 px-5 py-4 text-sm ${i > 0 ? "border-t border-gray-100" : ""} ${d.rag_status === "red" ? "bg-red-50" : d.rag_status === "yellow" ? "bg-amber-50" : ""}`}>
+              <div key={d.name}
+                className={`grid grid-cols-[120px_80px_1fr_1fr] items-start gap-4 px-5 py-4 text-sm
+                  ${i > 0 ? "border-t border-gray-100" : ""}
+                  ${d.rag_status === "red" ? "bg-red-50" : d.rag_status === "yellow" ? "bg-amber-50" : ""}`}>
                 <div>
                   <span className="font-semibold text-gray-800">{d.name}</span>
                   {d.fromDB && <div className="text-[10px] text-emerald-600 font-medium">● 팀장 보고</div>}
@@ -367,7 +448,7 @@ export default async function DashboardPage({
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
               주요 Action Items
-              <span className="ml-2 text-gray-400 font-normal normal-case">({actionItems.length}건 · DB)</span>
+              <span className="ml-2 text-gray-400 font-normal normal-case">({actionItems.length}건)</span>
             </h2>
             {delayedActions > 0 && (
               <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">지연 {delayedActions}건</span>
@@ -377,7 +458,7 @@ export default async function DashboardPage({
         </section>
 
         <footer className="text-center text-xs text-gray-400 py-4 border-t border-gray-200">
-          새림 ERP v1.0 · 재무KPI: monthly_kpi 실데이터 / 클레임·수율·생산량: Supabase 실데이터
+          새림 ERP · CEO 대시보드 · 납품전표 저장 시 매출 자동 반영 · 경고는 실데이터 기반
         </footer>
       </main>
     </div>
