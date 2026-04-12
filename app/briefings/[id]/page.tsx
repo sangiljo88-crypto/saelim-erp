@@ -2,6 +2,7 @@ import { getSession } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import BriefingActions from "@/components/BriefingActions";
+import BriefingInteractions from "@/components/BriefingInteractions";
 import { createServerClient } from "@/lib/supabase";
 
 const CATEGORY_META: Record<string, { label: string; color: string }> = {
@@ -27,11 +28,20 @@ export default async function BriefingDetailPage({
 
   const { id } = await params;
   const db = createServerClient();
-  const { data: briefing } = await db
-    .from("briefings")
-    .select("id, week_label, publish_date, category, title, content_html, author, is_pinned, created_at")
-    .eq("id", id)
-    .single();
+
+  const [{ data: briefing }, { data: reads }, { data: comments }] = await Promise.all([
+    db.from("briefings")
+      .select("id, week_label, publish_date, category, title, content_html, author, is_pinned, created_at")
+      .eq("id", id).single(),
+    db.from("briefing_reads")
+      .select("user_id, user_name")
+      .eq("briefing_id", id)
+      .order("created_at", { ascending: true }),
+    db.from("briefing_comments")
+      .select("id, user_id, user_name, content, created_at")
+      .eq("briefing_id", id)
+      .order("created_at", { ascending: true }),
+  ]);
 
   if (!briefing) notFound();
 
@@ -68,6 +78,16 @@ export default async function BriefingDetailPage({
           <div
             className="px-6 py-6 briefing-content"
             dangerouslySetInnerHTML={{ __html: briefing.content_html }}
+          />
+
+          {/* 읽었어요 + 댓글 */}
+          <BriefingInteractions
+            briefingId={id}
+            initialReads={reads ?? []}
+            initialComments={comments ?? []}
+            currentUserId={session.id}
+            currentUserName={session.name}
+            isCoo={isCoo}
           />
 
           {/* 하단 */}
