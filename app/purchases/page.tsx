@@ -12,7 +12,6 @@ export default async function PurchasesPage({ searchParams }: Props) {
   const session = await getSession();
   if (!session) redirect("/login");
   if (session.role === "worker") redirect("/worker");
-  // manager도 접근 가능 (해당 팀장이 매입 기록)
 
   const params = await searchParams;
   const today = new Date().toISOString().split("T")[0];
@@ -33,9 +32,9 @@ export default async function PurchasesPage({ searchParams }: Props) {
       .gte("purchase_date", from)
       .lte("purchase_date", to)
       .order("purchase_date", { ascending: false })
-      .order("created_at", { ascending: false }),
+      .order("created_at",    { ascending: false }),
 
-    // 원물/포장재 제품 목록 (빠른 입력용)
+    // 원물/포장재/부자재 제품 목록 (드롭다운 + 단가 비교)
     db.from("products")
       .select("code, name, category, purchase_price, unit")
       .in("category", ["원물", "포장재", "부자재"])
@@ -52,12 +51,10 @@ export default async function PurchasesPage({ searchParams }: Props) {
   const all = purchases ?? [];
   const totalCost = all.reduce((s, p) => s + (p.total_cost || 0), 0);
 
-  // 기존 공급업체 목록 (중복 제거)
   const existingSuppliers = Array.from(
     new Set((supplierRows ?? []).map((r) => r.supplier as string).filter(Boolean))
   ).sort();
 
-  // 원재료별 집계
   const materialTotals: Record<string, { cost: number; qty: number; unit: string }> = {};
   for (const p of all) {
     if (!materialTotals[p.material_name]) {
@@ -71,19 +68,30 @@ export default async function PurchasesPage({ searchParams }: Props) {
     <div className="min-h-screen bg-[#f0f2f5]">
       <AppHeader session={session} subtitle="매입 관리" />
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-5">
-        <div className="flex items-center justify-between">
+
+        {/* 헤더 */}
+        <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-lg font-bold text-gray-800">📦 원재료 매입 관리</h1>
             <p className="text-sm text-gray-500 mt-0.5">매입 입고 기록 · FIFO 원가 추적 · 잔여수량 관리</p>
           </div>
-          {totalCost > 0 && (
-            <div className="text-right">
-              <div className="text-xs text-gray-400">기간 총 매입금액</div>
-              <div className="text-xl font-bold text-[#1F3864]">
-                {(totalCost / 10000).toLocaleString()}만원
+          <div className="flex items-center gap-2">
+            {totalCost > 0 && (
+              <div className="text-right mr-2">
+                <div className="text-xs text-gray-400">기간 총 매입금액</div>
+                <div className="text-xl font-bold text-[#1F3864]">
+                  {(totalCost / 10000).toLocaleString()}만원
+                </div>
               </div>
-            </div>
-          )}
+            )}
+            {/* 품목 마스터 바로가기 */}
+            <a
+              href="/products"
+              className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-[#1F3864]/30 text-[#1F3864] px-4 py-2 rounded-lg hover:bg-[#1F3864] hover:text-white transition-colors whitespace-nowrap"
+            >
+              📋 품목 마스터
+            </a>
+          </div>
         </div>
 
         <PurchaseManager

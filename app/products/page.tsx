@@ -17,16 +17,25 @@ export default async function ProductsPage() {
       <AppHeader session={session} subtitle="품목 마스터 관리" />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-lg font-bold text-gray-800">품목 마스터 관리</h1>
             <p className="text-sm text-gray-500">
               전체 {products.length}개 품목 · 행 클릭으로 인라인 편집 · 엑셀 업/다운로드
             </p>
           </div>
-          <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full font-semibold">
-            관리자 전용
-          </span>
+          <div className="flex items-center gap-2">
+            {/* 매입관리 바로가기 */}
+            <a
+              href="/purchases"
+              className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-[#1F3864]/30 text-[#1F3864] px-4 py-2 rounded-lg hover:bg-[#1F3864] hover:text-white transition-colors whitespace-nowrap"
+            >
+              📦 매입관리
+            </a>
+            <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full font-semibold">
+              관리자 전용
+            </span>
+          </div>
         </div>
 
         <ProductMasterSection initialProducts={products} />
