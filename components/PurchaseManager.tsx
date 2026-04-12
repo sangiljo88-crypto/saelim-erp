@@ -81,6 +81,16 @@ const EMPTY_FORM = {
   notes: "",
 };
 
+/** ISO timestamptz → "HH:MM" 로컬 시간 */
+function fmtTime(iso: string): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("ko-KR", {
+    hour:   "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 function remainingColor(ratio: number) {
   if (ratio <= 0)   return "bg-gray-300";
   if (ratio < 0.5)  return "bg-orange-400";
@@ -402,7 +412,7 @@ export default function PurchaseManager({
                           return (
                             <div
                               key={b.id}
-                              title={`${b.purchase_date} · ${b.remaining_qty.toLocaleString()}${unit} · ${b.unit_price.toLocaleString()}원/${unit}`}
+                              title={`${b.purchase_date} ${fmtTime(b.created_at ?? "")} · ${b.remaining_qty.toLocaleString()}${unit} · ${b.unit_price.toLocaleString()}원/${unit}`}
                               className={`${BATCH_COLORS[i % BATCH_COLORS.length]} transition-all`}
                               style={{ width: `${ratio}%` }}
                             />
@@ -427,7 +437,10 @@ export default function PurchaseManager({
                                 선입 우선
                               </span>
                             )}
-                            <span className="text-gray-400">{b.purchase_date}</span>
+                            <span className="text-gray-500 font-medium">{b.purchase_date}</span>
+                            {b.created_at && (
+                              <span className="text-gray-400 text-[10px]">{fmtTime(b.created_at)}</span>
+                            )}
                             <span className={`font-bold ${BATCH_TEXT_COLORS[i % BATCH_TEXT_COLORS.length]}`}>
                               {b.unit_price.toLocaleString()}원/{unit}
                             </span>
@@ -497,7 +510,10 @@ export default function PurchaseManager({
                               <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white ${BATCH_COLORS[i % BATCH_COLORS.length]}`}>
                                 {i + 1}
                               </span>
-                              <span>{d.purchase_date}</span>
+                              <span className="font-medium">{d.purchase_date}</span>
+                              {d.created_at && (
+                                <span className="text-gray-400 text-[10px]">{fmtTime(d.created_at)}</span>
+                              )}
                               <span className={`font-semibold ${BATCH_TEXT_COLORS[i % BATCH_TEXT_COLORS.length]}`}>
                                 {d.unit_price.toLocaleString()}원
                               </span>
@@ -817,6 +833,9 @@ export default function PurchaseManager({
                     </div>
                     <div className="text-xs text-gray-400 mt-0.5">
                       {p.purchase_date}
+                      {p.created_at && (
+                        <span className="ml-1 text-gray-300">({fmtTime(p.created_at)})</span>
+                      )}
                       {p.supplier && <span> · {p.supplier}</span>}
                       {p.recorded_by && <span> · {p.recorded_by}</span>}
                     </div>

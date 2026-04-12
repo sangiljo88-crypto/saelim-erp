@@ -16,6 +16,7 @@ export interface FifoResult {
   avgUnitPrice: number;    // 평균 단가
   batchDetails: Array<{
     purchase_date: string;
+    created_at?: string;   // 등록 시각 (시간 표시용)
     unit_price: number;
     consumed: number;      // 해당 배치에서 소비한 수량
     cost: number;          // 해당 배치 원가
@@ -55,6 +56,7 @@ export function calculateFifo(
 
     batchDetails.push({
       purchase_date: batch.purchase_date,
+      created_at:    batch.created_at,
       unit_price:    batch.unit_price,
       consumed,
       cost,
