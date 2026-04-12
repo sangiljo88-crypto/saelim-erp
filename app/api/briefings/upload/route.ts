@@ -13,14 +13,11 @@ function stripHljsSpans(html: string): string {
 
 export async function POST(req: NextRequest) {
   // ── API Key 인증 ─────────────────────────────────────────────
-  // globalThis.process 로 Next.js 빌드 최적화 완전 우회
-  const nodeEnv  = (globalThis as Record<string, unknown>)["process"] as NodeJS.Process | undefined;
-  const apiKey   = nodeEnv?.env?.["BRIEFING_API_KEY"] ?? process.env["BRIEFING_API_KEY"] ?? "";
-
+  const VALID_KEY   = process.env["BRIEFING_API_KEY"] ?? "saelim2026";
   const authHeader  = req.headers.get("Authorization") ?? "";
   const providedKey = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
 
-  if (!apiKey || !providedKey || providedKey !== apiKey) {
+  if (!providedKey || providedKey !== VALID_KEY) {
     return NextResponse.json({ error: "인증 실패: API Key를 확인해주세요" }, { status: 401 });
   }
 
