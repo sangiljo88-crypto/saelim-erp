@@ -11,6 +11,13 @@ interface ProductionLog {
   output_qty: number;
   yield_rate: number;
   issue_note: string | null;
+  product_id?: string;
+}
+
+interface PrevProductionLog {
+  yield_rate: number;
+  input_qty: number;
+  output_qty: number;
 }
 
 interface Claim {
@@ -67,11 +74,15 @@ interface Props {
   since: string;
   until: string;
   production: ProductionLog[];
-  claims: Claim[];
+  prevProduction: PrevProductionLog[];
+  thisWeekClaims: Claim[];
+  openClaims: Claim[];
+  prevWeekClaimsCount: number;
   deptReports: DeptReport[];
   costApprovals: CostApproval[];
   maintenance: MaintenanceLog[];
   deliveries: DeliveryLog[];
+  prevDeliveryTotal: number;
   priceById: Record<string, number>;
   priceByName: Record<string, number>;
   keywordPriceMap: Record<string, number>;
@@ -90,7 +101,7 @@ function formatWon(n: number) {
 }
 
 function getPrice(
-  log: ProductionLog & { product_id?: string },
+  log: ProductionLog,
   priceById: Record<string, number>,
   priceByName: Record<string, number>,
   keywordPriceMap: Record<string, number>,
@@ -110,41 +121,63 @@ const RAG_STYLE: Record<string, { bg: string; text: string; label: string }> = {
 };
 
 const CLAIM_STATUS: Record<string, { bg: string; text: string; label: string }> = {
-  pending:     { bg: "bg-red-100",    text: "text-red-600",   label: "미처리" },
-  in_progress: { bg: "bg-amber-100",  text: "text-amber-700", label: "처리중" },
-  resolved:    { bg: "bg-green-100",  text: "text-green-700", label: "완료" },
+  pending:     { bg: "bg-red-100",   text: "text-red-600",   label: "미처리" },
+  in_progress: { bg: "bg-amber-100", text: "text-amber-700", label: "처리중" },
+  resolved:    { bg: "bg-green-100", text: "text-green-700", label: "완료" },
 };
 
-// ── 섹션 카드 ─────────────────────────────────────────────────
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+// ── 서브 컴포넌트 ─────────────────────────────────────────────
+function Section({
+  title, urgent = false, children,
+}: {
+  title: string; urgent?: boolean; children: React.ReactNode;
+}) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60">
-        <div className="text-sm font-bold text-gray-700">{title}</div>
+    <div className={`bg-white rounded-xl border overflow-hidden ${urgent ? "border-red-200" : "border-gray-200"}`}>
+      <div className={`px-5 py-3.5 border-b flex items-center gap-2 ${urgent ? "bg-red-50 border-red-100" : "bg-gray-50/60 border-gray-100"}`}>
+        <div className={`text-sm font-bold ${urgent ? "text-red-700" : "text-gray-700"}`}>{title}</div>
+        {urgent && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">조치 필요</span>}
       </div>
       <div className="p-5">{children}</div>
     </div>
   );
 }
 
+function Diff({ curr, prev, unit = "", invert = false }: {
+  curr: number; prev: number; unit?: string; invert?: boolean;
+}) {
+  if (!prev) return null;
+  const d = Math.round((curr - prev) * 10) / 10;
+  if (d === 0) return <span className="text-xs text-gray-400">전주 동일</span>;
+  const positive = invert ? d < 0 : d > 0;
+  return (
+    <span className={`text-xs font-semibold ${positive ? "text-green-500" : "text-red-400"}`}>
+      {d > 0 ? "▲" : "▼"} {Math.abs(d)}{unit} 전주 대비
+    </span>
+  );
+}
+
 function StatCard({
-  label, value, sub, color = "text-gray-800",
+  label, value, sub, color = "text-gray-800", diffNode,
 }: {
-  label: string; value: string; sub?: string; color?: string;
+  label: string; value: string; sub?: string; color?: string; diffNode?: React.ReactNode;
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
       <div className="text-xs text-gray-400 mb-1">{label}</div>
       <div className={`text-2xl font-bold ${color}`}>{value}</div>
+      {diffNode && <div className="mt-1">{diffNode}</div>}
       {sub && <div className="text-xs text-gray-400 mt-0.5">{sub}</div>}
     </div>
   );
 }
 
-// ── 메인 컴포넌트 ──────────────────────────────────────────────
+// ── 메인 ─────────────────────────────────────────────────────
 export default function WeeklyReport({
   weekLabel, since, until,
-  production, claims, deptReports, costApprovals, maintenance, deliveries,
+  production, prevProduction,
+  thisWeekClaims, openClaims, prevWeekClaimsCount,
+  deptReports, costApprovals, maintenance, deliveries, prevDeliveryTotal,
   priceById, priceByName, keywordPriceMap,
 }: Props) {
   const [printing, setPrinting] = useState(false);
@@ -154,36 +187,52 @@ export default function WeeklyReport({
     setTimeout(() => { window.print(); setPrinting(false); }, 100);
   }
 
+  // ── 납품 지표 ─────────────────────────────────────────────
+  const totalDelivery     = deliveries.reduce((s, d) => s + (d.total_amount || 0), 0);
+  const deliveryDiff      = prevDeliveryTotal
+    ? Math.round(((totalDelivery - prevDeliveryTotal) / prevDeliveryTotal) * 100 * 10) / 10
+    : null;
+
+  // 거래처별 납품 집계
+  const customerMap = new Map<string, number>();
+  for (const d of deliveries) {
+    customerMap.set(d.customer_name, (customerMap.get(d.customer_name) ?? 0) + (d.total_amount || 0));
+  }
+  const topCustomers = Array.from(customerMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
   // ── 수율 지표 ─────────────────────────────────────────────
-  const avgYield   = avg(production.map((l) => l.yield_rate));
-  const totalInput  = production.reduce((s, l) => s + (l.input_qty || 0), 0);
-  const totalOutput = production.reduce((s, l) => s + (l.output_qty || 0), 0);
-  const belowThreshold = production.filter((l) => l.yield_rate < 85).length;
-  const totalLoss = production.reduce((sum, l) => {
+  const avgYield      = avg(production.map((l) => l.yield_rate));
+  const prevAvgYield  = avg(prevProduction.map((l) => l.yield_rate));
+  const totalInput    = production.reduce((s, l) => s + (l.input_qty || 0), 0);
+  const totalOutput   = production.reduce((s, l) => s + (l.output_qty || 0), 0);
+  const belowCount    = production.filter((l) => l.yield_rate < 85).length;
+  const totalLoss     = production.reduce((sum, l) => {
     const loss = (l.input_qty || 0) - (l.output_qty || 0);
-    const p = getPrice(l as ProductionLog & { product_id?: string }, priceById, priceByName, keywordPriceMap);
+    const p = getPrice(l, priceById, priceByName, keywordPriceMap);
     return sum + (loss > 0 && p > 0 ? loss * p : 0);
   }, 0);
 
   // ── 클레임 지표 ───────────────────────────────────────────
-  const newClaims       = claims.filter((c) => c.status === "pending").length;
-  const progressClaims  = claims.filter((c) => c.status === "in_progress").length;
-  const resolvedClaims  = claims.filter((c) => c.status === "resolved").length;
+  // thisWeekClaims: 이번 주 발생분 / openClaims: 누적 미처리·처리중
+  // openClaims에서 이번 주 것은 제외해 "이월된" 건수만 따로 표시
+  const thisWeekIds   = new Set(thisWeekClaims.map((c) => c.id));
+  const carriedOpen   = openClaims.filter((c) => !thisWeekIds.has(c.id));
 
   // ── 팀 보고 ───────────────────────────────────────────────
-  const allDepts = ["현장팀", "물류팀", "품질CS팀", "영업마케팅팀", "경영지원팀"];
+  const allDepts      = ["현장팀", "물류팀", "품질CS팀", "영업마케팅팀", "경영지원팀"];
   const reportedDepts = new Set(deptReports.map((r) => r.dept));
-  const redCount    = deptReports.filter((r) => r.rag_status === "red").length;
+  const redCount      = deptReports.filter((r) => r.rag_status === "red").length;
 
   // ── 비용 승인 ─────────────────────────────────────────────
-  const pendingApprovals = costApprovals.filter((a) => a.status === "pending");
-  const pendingAmount    = pendingApprovals.reduce((s, a) => s + (a.amount || 0), 0);
+  const pendingAmount = costApprovals.reduce((s, a) => s + (a.amount || 0), 0);
 
-  // ── 납품 ─────────────────────────────────────────────────
-  const totalDelivery = deliveries.reduce((s, d) => s + (d.total_amount || 0), 0);
-
-  // ── 설비 진행중 이슈 ──────────────────────────────────────
+  // ── 설비 ─────────────────────────────────────────────────
   const openMaintenance = maintenance.filter((m) => m.result === "진행중");
+
+  // ── 전체 이상 신호 여부 ───────────────────────────────────
+  const hasAlert = redCount > 0 || openClaims.filter((c) => c.status === "pending").length > 2;
 
   return (
     <div className="flex flex-col gap-4 print:gap-3">
@@ -192,7 +241,7 @@ export default function WeeklyReport({
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-lg font-bold text-gray-800">📋 주간 경영 보고서</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{weekLabel} · {since} ~ {until}</p>
+          <p className="text-sm text-gray-500 mt-0.5">{weekLabel}</p>
         </div>
         <button
           onClick={handlePrint}
@@ -203,41 +252,131 @@ export default function WeeklyReport({
         </button>
       </div>
 
-      {/* 핵심 지표 카드 */}
+      {/* ── 전체 이상 알림 배너 (있을 때만) ── */}
+      {hasAlert && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-3">
+          <span className="text-lg">🚨</span>
+          <div className="text-sm text-red-700 font-semibold">
+            {redCount > 0 && `위험 상태 팀 ${redCount}곳`}
+            {redCount > 0 && openClaims.filter((c) => c.status === "pending").length > 2 && " · "}
+            {openClaims.filter((c) => c.status === "pending").length > 2 && `미처리 클레임 ${openClaims.filter((c) => c.status === "pending").length}건`}
+            <span className="font-normal text-red-500 ml-2">즉시 확인이 필요합니다</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── 핵심 지표 카드 4개 ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* 납품 금액 — 제일 먼저 */}
+        <StatCard
+          label="이번 주 납품액"
+          value={deliveries.length ? formatWon(totalDelivery) : "–"}
+          color="text-[#1F3864]"
+          diffNode={
+            deliveryDiff !== null ? (
+              <span className={`text-xs font-semibold ${deliveryDiff >= 0 ? "text-green-500" : "text-red-400"}`}>
+                {deliveryDiff >= 0 ? "▲" : "▼"} {Math.abs(deliveryDiff)}% 전주 대비
+              </span>
+            ) : undefined
+          }
+          sub={`${deliveries.length}건`}
+        />
+
+        {/* 평균 수율 */}
         <StatCard
           label="평균 수율"
           value={production.length ? `${avgYield}%` : "–"}
-          sub={`미달 ${belowThreshold}건`}
           color={avgYield >= 85 ? "text-green-600" : "text-red-500"}
+          diffNode={
+            prevAvgYield ? (
+              <Diff curr={avgYield} prev={prevAvgYield} unit="%" />
+            ) : undefined
+          }
+          sub={`미달 ${belowCount}건`}
         />
+
+        {/* 클레임 */}
         <StatCard
-          label="클레임 신규"
-          value={claims.length ? `${newClaims}건` : "–"}
-          sub={`처리중 ${progressClaims}건 · 완료 ${resolvedClaims}건`}
-          color={newClaims > 0 ? "text-red-500" : "text-green-600"}
+          label="이번 주 클레임"
+          value={`${thisWeekClaims.length}건`}
+          color={thisWeekClaims.length > 0 ? "text-red-500" : "text-green-600"}
+          diffNode={
+            <Diff curr={thisWeekClaims.length} prev={prevWeekClaimsCount} invert unit="건" />
+          }
+          sub={carriedOpen.length > 0 ? `이월 미처리 ${carriedOpen.length}건` : "이월 없음"}
         />
+
+        {/* 팀 보고 */}
         <StatCard
-          label="팀별 보고"
+          label="팀별 보고 현황"
           value={`${reportedDepts.size}/${allDepts.length}팀`}
-          sub={redCount > 0 ? `🔴 위험 ${redCount}건` : "이슈 없음"}
           color={redCount > 0 ? "text-red-500" : "text-gray-700"}
-        />
-        <StatCard
-          label="비용 승인 대기"
-          value={pendingApprovals.length ? `${pendingApprovals.length}건` : "0건"}
-          sub={pendingApprovals.length ? formatWon(pendingAmount) : "대기 없음"}
-          color={pendingApprovals.length > 0 ? "text-amber-600" : "text-green-600"}
+          sub={redCount > 0 ? `🔴 위험 ${redCount}건` : "이슈 없음"}
         />
       </div>
 
-      {/* 수율 현황 */}
+      {/* ── ① 납품 현황 (최상단 섹션) ── */}
+      <Section title="🚚 납품 현황">
+        {deliveries.length === 0 ? (
+          <div className="text-sm text-gray-400 text-center py-6">이번 주 납품 데이터 없음</div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {/* 요약 row */}
+            <div className="flex items-center gap-6 flex-wrap">
+              <div>
+                <div className="text-xs text-gray-400 mb-0.5">총 납품 금액</div>
+                <div className="text-2xl font-bold text-[#1F3864]">{formatWon(totalDelivery)}</div>
+                {deliveryDiff !== null && (
+                  <span className={`text-xs font-semibold ${deliveryDiff >= 0 ? "text-green-500" : "text-red-400"}`}>
+                    {deliveryDiff >= 0 ? "▲" : "▼"} {Math.abs(deliveryDiff)}% 전주 대비
+                    <span className="text-gray-400 font-normal ml-1">({formatWon(prevDeliveryTotal)})</span>
+                  </span>
+                )}
+              </div>
+              <div className="h-10 w-px bg-gray-100 hidden sm:block" />
+              <div>
+                <div className="text-xs text-gray-400 mb-0.5">납품 건수</div>
+                <div className="text-xl font-bold text-gray-700">{deliveries.length}건</div>
+              </div>
+            </div>
+
+            {/* 거래처별 납품액 */}
+            {topCustomers.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-gray-500 mb-2">거래처별 납품액 (TOP 5)</div>
+                <div className="flex flex-col gap-1.5">
+                  {topCustomers.map(([name, amount], i) => {
+                    const pct = totalDelivery > 0 ? Math.round((amount / totalDelivery) * 100) : 0;
+                    return (
+                      <div key={name} className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400 w-4 shrink-0">{i + 1}</span>
+                        <span className="text-xs text-gray-700 w-28 truncate shrink-0">{name}</span>
+                        <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-[#1F3864]"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-semibold text-gray-700 w-20 text-right shrink-0">
+                          {formatWon(amount)}
+                        </span>
+                        <span className="text-xs text-gray-400 w-8 text-right shrink-0">{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Section>
+
+      {/* ── ② 수율 현황 ── */}
       <Section title="📊 수율 현황">
         {production.length === 0 ? (
           <div className="text-sm text-gray-400 text-center py-6">이번 주 생산 데이터 없음</div>
         ) : (
           <div className="flex flex-col gap-4">
-            {/* 요약 row */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <div className="text-xs text-gray-400 mb-1">총 투입</div>
@@ -250,12 +389,11 @@ export default function WeeklyReport({
               <div className={`rounded-lg p-3 text-center ${totalLoss > 500_000 ? "bg-red-50" : "bg-gray-50"}`}>
                 <div className="text-xs text-gray-400 mb-1">추정 손실</div>
                 <div className={`text-lg font-bold ${totalLoss > 500_000 ? "text-red-500" : "text-amber-500"}`}>
-                  {totalLoss > 0 ? formatWon(totalLoss) : "단가 미설정"}
+                  {totalLoss > 0 ? formatWon(totalLoss) : "–"}
                 </div>
               </div>
             </div>
 
-            {/* 이슈 로그 */}
             {production.filter((l) => l.yield_rate < 85 || l.issue_note).length > 0 && (
               <div>
                 <div className="text-xs font-semibold text-gray-500 mb-2">⚠️ 기준 미달 · 이슈 항목</div>
@@ -280,37 +418,74 @@ export default function WeeklyReport({
         )}
       </Section>
 
-      {/* 클레임 현황 */}
-      <Section title="📋 클레임 현황">
-        {claims.length === 0 ? (
-          <div className="text-sm text-green-600 font-semibold text-center py-6">✅ 이번 주 클레임 없음</div>
+      {/* ── ③ 클레임 현황 ── */}
+      <Section
+        title="📋 클레임 현황"
+        urgent={openClaims.filter((c) => c.status === "pending").length > 2}
+      >
+        {thisWeekClaims.length === 0 && openClaims.length === 0 ? (
+          <div className="text-sm text-green-600 font-semibold text-center py-6">✅ 이번 주 클레임 없음 · 누적 미처리 없음</div>
         ) : (
-          <div className="flex flex-col gap-2">
-            {claims.slice(0, 8).map((c) => {
-              const s = CLAIM_STATUS[c.status] ?? CLAIM_STATUS.pending;
-              return (
-                <div key={c.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
-                  <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>{s.label}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-gray-700">
-                      {c.claim_date} · {c.client_name} · {c.claim_type}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-0.5 truncate">{c.content}</div>
-                  </div>
-                  <span className="text-xs text-gray-300 shrink-0">{c.dept}</span>
+          <div className="flex flex-col gap-4">
+            {/* 이번 주 신규 */}
+            {thisWeekClaims.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-gray-500 mb-2">
+                  이번 주 신규 ({thisWeekClaims.length}건)
+                  <span className="ml-2 font-normal">
+                    <Diff curr={thisWeekClaims.length} prev={prevWeekClaimsCount} invert unit="건" />
+                  </span>
                 </div>
-              );
-            })}
-            {claims.length > 8 && (
-              <div className="text-xs text-gray-400 text-center pt-1">
-                외 {claims.length - 8}건 · <a href="/claims" className="text-[#1F3864] underline print:no-underline">전체 보기</a>
+                <div className="flex flex-col gap-1">
+                  {thisWeekClaims.slice(0, 5).map((c) => {
+                    const s = CLAIM_STATUS[c.status] ?? CLAIM_STATUS.pending;
+                    return (
+                      <div key={c.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
+                        <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>{s.label}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-gray-700">{c.client_name} · {c.claim_type}</div>
+                          <div className="text-xs text-gray-400 mt-0.5 truncate">{c.content}</div>
+                        </div>
+                        <span className="text-xs text-gray-300 shrink-0">{c.claim_date}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 이월 미처리 */}
+            {carriedOpen.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-red-500 mb-2">이월 미처리·처리중 ({carriedOpen.length}건)</div>
+                <div className="flex flex-col gap-1">
+                  {carriedOpen.slice(0, 5).map((c) => {
+                    const s = CLAIM_STATUS[c.status] ?? CLAIM_STATUS.pending;
+                    return (
+                      <div key={c.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
+                        <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>{s.label}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-gray-700">{c.client_name} · {c.claim_type}</div>
+                          <div className="text-xs text-gray-400 mt-0.5 truncate">{c.content}</div>
+                        </div>
+                        <span className="text-xs text-gray-300 shrink-0">{c.claim_date}</span>
+                      </div>
+                    );
+                  })}
+                  {carriedOpen.length > 5 && (
+                    <div className="text-xs text-gray-400 text-center pt-1">
+                      외 {carriedOpen.length - 5}건 ·{" "}
+                      <a href="/claims" className="text-[#1F3864] underline">전체 보기</a>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
         )}
       </Section>
 
-      {/* 팀별 주간 보고 */}
+      {/* ── ④ 팀별 주간 보고 ── */}
       <Section title="🏢 팀별 주간 보고">
         {deptReports.length === 0 ? (
           <div className="text-sm text-gray-400 text-center py-6">이번 주 제출된 보고 없음</div>
@@ -330,7 +505,8 @@ export default function WeeklyReport({
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-semibold text-gray-700 mb-0.5">
-                        {r.dept} <span className="text-gray-400 font-normal">· {r.manager_name} · {r.report_date}</span>
+                        {r.dept}
+                        <span className="text-gray-400 font-normal"> · {r.manager_name} · {r.report_date}</span>
                       </div>
                       <div className="text-xs text-gray-600">{r.issue}</div>
                       {r.next_action && (
@@ -345,12 +521,13 @@ export default function WeeklyReport({
                   </div>
                 );
               })}
+
             {/* 미제출 팀 */}
             {(() => {
               const unreported = allDepts.filter((d) => !reportedDepts.has(d));
-              if (!unreported.length) return null;
+              if (!unreported.length) return <div className="text-xs text-green-600 font-semibold pt-1">✅ 전 팀 보고 완료</div>;
               return (
-                <div className="flex flex-wrap gap-1.5 pt-1">
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
                   <span className="text-xs text-gray-400">미제출:</span>
                   {unreported.map((d) => (
                     <span key={d} className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{d}</span>
@@ -362,11 +539,11 @@ export default function WeeklyReport({
         )}
       </Section>
 
-      {/* 비용 승인 대기 (있을 때만) */}
-      {pendingApprovals.length > 0 && (
-        <Section title="💰 비용 승인 대기">
+      {/* ── ⑤ 비용 승인 대기 (있을 때만) ── */}
+      {costApprovals.length > 0 && (
+        <Section title="💰 대표 결재 필요 사항" urgent>
           <div className="flex flex-col gap-2">
-            {pendingApprovals.map((a) => (
+            {costApprovals.map((a) => (
               <div key={a.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-semibold text-gray-700">{a.title}</div>
@@ -375,14 +552,15 @@ export default function WeeklyReport({
                 <span className="text-sm font-bold text-amber-600 shrink-0">{formatWon(a.amount)}</span>
               </div>
             ))}
-            <div className="text-right text-xs font-bold text-gray-600 pt-1">
-              합계 {formatWon(pendingAmount)}
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xs text-gray-400">총 {costApprovals.length}건</span>
+              <span className="text-sm font-bold text-gray-700">합계 {formatWon(pendingAmount)}</span>
             </div>
           </div>
         </Section>
       )}
 
-      {/* 설비 진행중 이슈 (있을 때만) */}
+      {/* ── ⑥ 설비 이슈 (있을 때만) ── */}
       {openMaintenance.length > 0 && (
         <Section title="🔧 처리중인 설비 이슈">
           <div className="flex flex-col gap-2">
@@ -402,29 +580,10 @@ export default function WeeklyReport({
         </Section>
       )}
 
-      {/* 납품 현황 (데이터 있을 때만) */}
-      {deliveries.length > 0 && (
-        <Section title="🚚 납품 현황">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div>
-              <div className="text-xs text-gray-400 mb-0.5">납품 건수</div>
-              <div className="text-xl font-bold text-gray-700">{deliveries.length}건</div>
-            </div>
-            {totalDelivery > 0 && (
-              <div>
-                <div className="text-xs text-gray-400 mb-0.5">총 납품 금액</div>
-                <div className="text-xl font-bold text-[#1F3864]">{formatWon(totalDelivery)}</div>
-              </div>
-            )}
-          </div>
-        </Section>
-      )}
-
       {/* 푸터 */}
-      <div className="text-center text-xs text-gray-400 py-2 print:block">
+      <div className="text-center text-xs text-gray-400 py-2">
         새림 ERP · 주간 경영 보고서 · {new Date().toLocaleDateString("ko-KR")} 기준
       </div>
-
     </div>
   );
 }
