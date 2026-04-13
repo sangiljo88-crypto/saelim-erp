@@ -218,14 +218,33 @@ export async function approveVacation(
 
   const db = createServerClient();
 
-  // 기존 상태 조회 (복구 처리용)
-  const { data: vac, error: fetchErr } = await db
+  // 기존 상태 조회 (복구 처리용) — deducted_days 없는 구 스키마도 호환
+  let vac: { requester_id: string; requester_name: string; dept: string | null; start_date: string; days_count: number; deducted_days?: number; status: string } | null = null;
+
+  const { data: vacFull, error: fetchErr } = await db
     .from("vacation_requests")
-    .select("requester_id, requester_name, dept, start_date, deducted_days, status")
+    .select("requester_id, requester_name, dept, start_date, days_count, deducted_days, status")
     .eq("id", id)
     .single();
 
-  if (fetchErr || !vac) throw new Error("신청 건을 찾을 수 없습니다.");
+  if (fetchErr) {
+    // deducted_days 컬럼이 없는 구 스키마일 때 재시도
+    if (fetchErr.code === '42703' || fetchErr.message.includes('column')) {
+      const { data: vacBasic, error: fetchErr2 } = await db
+        .from("vacation_requests")
+        .select("requester_id, requester_name, dept, start_date, days_count, status")
+        .eq("id", id)
+        .single();
+      if (fetchErr2 || !vacBasic) throw new Error("신청 건을 찾을 수 없습니다.");
+      vac = { ...vacBasic, deducted_days: vacBasic.days_count };
+    } else {
+      throw new Error("신청 건을 찾을 수 없습니다.");
+    }
+  } else {
+    vac = vacFull;
+  }
+
+  if (!vac) throw new Error("신청 건을 찾을 수 없습니다.");
 
   const { error } = await db
     .from("vacation_requests")
@@ -241,7 +260,7 @@ export async function approveVacation(
   if (error) throw new Error(error.message);
 
   const year = new Date(vac.start_date as string).getFullYear();
-  const deductedDays = Number(vac.deducted_days ?? 1);
+  const deductedDays = Number(vac.deducted_days ?? vac.days_count ?? 1);
   const approverSession = { id: session.id, name: session.name };
 
   if (status === "approved") {

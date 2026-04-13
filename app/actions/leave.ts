@@ -222,13 +222,16 @@ export async function deductLeaveOnApproval(
   deductedDays: number,
   approverSession: { id: string; name: string }
 ): Promise<void> {
-  // 현재 잔여 조회 (없으면 15일로 초기화)
-  const { data: bal } = await db
+  // 현재 잔여 조회 (없으면 15일로 초기화) — 테이블 없으면 조용히 종료
+  const { data: bal, error: balErr } = await db
     .from("employee_leave_balances")
     .select("*")
     .eq("employee_id", employeeId)
     .eq("year", year)
     .single();
+
+  // 테이블 자체가 없으면 (마이그레이션 미실행) 연차 차감 없이 종료
+  if (balErr && (balErr.code === '42P01' || balErr.message.includes('does not exist'))) return;
 
   let balId: string;
   let beforeUsed: number;
@@ -265,6 +268,7 @@ export async function deductLeaveOnApproval(
     .update({ used_days: newUsed, updated_at: new Date().toISOString() })
     .eq("id", balId);
 
+  // leave_balance_adjustments 없으면 조용히 무시
   await db.from("leave_balance_adjustments").insert({
     employee_id:         employeeId,
     employee_name:       employeeName,
@@ -292,13 +296,15 @@ export async function restoreLeaveOnReject(
   deductedDays: number,
   approverSession: { id: string; name: string }
 ): Promise<void> {
-  const { data: bal } = await db
+  const { data: bal, error: balErr } = await db
     .from("employee_leave_balances")
     .select("*")
     .eq("employee_id", employeeId)
     .eq("year", year)
     .single();
 
+  // 테이블 없거나 잔여 없으면 조용히 종료
+  if (balErr && (balErr.code === '42P01' || balErr.message.includes('does not exist'))) return;
   if (!bal) return;
 
   const beforeUsed = Number(bal.used_days);
