@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 // ── 타입 ──────────────────────────────────────────────────────
 interface ProductionLog {
@@ -71,6 +72,7 @@ interface DeliveryLog {
 
 interface Props {
   weekLabel: string;
+  weekOffset: number;
   since: string;
   until: string;
   production: ProductionLog[];
@@ -174,17 +176,24 @@ function StatCard({
 
 // ── 메인 ─────────────────────────────────────────────────────
 export default function WeeklyReport({
-  weekLabel, since, until,
+  weekLabel, weekOffset, since, until,
   production, prevProduction,
   thisWeekClaims, openClaims, prevWeekClaimsCount,
   deptReports, costApprovals, maintenance, deliveries, prevDeliveryTotal,
   priceById, priceByName, keywordPriceMap,
 }: Props) {
   const [printing, setPrinting] = useState(false);
+  const router = useRouter();
 
   function handlePrint() {
     setPrinting(true);
     setTimeout(() => { window.print(); setPrinting(false); }, 100);
+  }
+
+  function goWeek(offset: number) {
+    const next = weekOffset + offset;
+    if (next > 0) return; // 미래 주차 이동 불가
+    router.push(`/report${next === 0 ? "" : `?week=${next}`}`);
   }
 
   // ── 납품 지표 ─────────────────────────────────────────────
@@ -241,7 +250,31 @@ export default function WeeklyReport({
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-lg font-bold text-gray-800">📋 주간 경영 보고서</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{weekLabel}</p>
+          {/* 주차 네비게이션 */}
+          <div className="flex items-center gap-2 mt-1.5">
+            <button
+              onClick={() => goWeek(-1)}
+              className="print:hidden text-xs text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+            >
+              ← 전주
+            </button>
+            <span className="text-sm font-semibold text-[#1F3864] px-1">{weekLabel}</span>
+            <button
+              onClick={() => goWeek(1)}
+              disabled={weekOffset >= 0}
+              className="print:hidden text-xs text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              다음 주 →
+            </button>
+            {weekOffset < 0 && (
+              <button
+                onClick={() => router.push("/report")}
+                className="print:hidden text-xs text-[#1F3864] border border-[#1F3864] bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+              >
+                이번 주
+              </button>
+            )}
+          </div>
         </div>
         <button
           onClick={handlePrint}

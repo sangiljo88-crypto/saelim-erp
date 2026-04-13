@@ -4,25 +4,60 @@ import AppHeader from "@/components/AppHeader";
 import WeeklyReport from "@/components/WeeklyReport";
 import { createServerClient } from "@/lib/supabase";
 
-export default async function ReportPage() {
+// ISO 주차 번호 계산
+function getISOWeek(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+// 주차 오프셋(offset)에 해당하는 월요일~금요일 범위 계산
+function getWeekRange(offset: number): { monday: Date; friday: Date } {
+  const now = new Date();
+  const day = now.getDay(); // 0=일, 1=월 ... 6=토
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMonday + offset * 7);
+  monday.setHours(0, 0, 0, 0);
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+  return { monday, friday };
+}
+
+function toDateStr(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
+export default async function ReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ week?: string }>;
+}) {
   const session = await getSession();
   if (!session) redirect("/login");
   if (session.role !== "ceo" && session.role !== "coo") redirect("/");
 
+  const params = await searchParams;
+  // week 쿼리: 0 = 이번주, -1 = 전주, -2 = 2주전 …  양수(미래)는 0으로 클램프
+  const weekOffset = Math.min(0, parseInt(params.week ?? "0", 10) || 0);
+
   const db = createServerClient();
 
-  // 이번 주 범위 (오늘 기준 최근 7일)
-  const until = new Date().toISOString().split("T")[0];
-  const sinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const since = sinceDate.toISOString().split("T")[0];
+  // ── 이번 주차(월~금) 범위
+  const { monday, friday } = getWeekRange(weekOffset);
+  const since = toDateStr(monday);
+  const until = toDateStr(friday);
 
-  // 전주 범위
-  const prevUntil = since;
-  const prevSince = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
-    .toISOString().split("T")[0];
+  // ── 전주(비교용) 범위
+  const { monday: prevMonday, friday: prevFriday } = getWeekRange(weekOffset - 1);
+  const prevSince = toDateStr(prevMonday);
+  const prevUntil = toDateStr(prevFriday);
 
-  // 주 레이블 (날짜 범위로 표시)
-  const weekLabel = `${since.slice(5).replace("-", "/")} ~ ${until.slice(5).replace("-", "/")}`;
+  // ── 주차 레이블
+  const weekNum = getISOWeek(monday);
+  const weekLabel = `${monday.getFullYear()}년 ${weekNum}주차 · ${since.slice(5).replace("-", "/")}(월) ~ ${until.slice(5).replace("-", "/")}(금)`;
 
   const [
     { data: production },
@@ -41,18 +76,20 @@ export default async function ReportPage() {
     db.from("production_logs")
       .select("work_date, dept, product_id, product_name, input_qty, output_qty, yield_rate, issue_note")
       .gte("work_date", since)
+      .lte("work_date", until)
       .order("work_date", { ascending: false }),
 
     // 전주 생산 (비교용)
     db.from("production_logs")
       .select("yield_rate, input_qty, output_qty")
       .gte("work_date", prevSince)
-      .lt("work_date", prevUntil),
+      .lte("work_date", prevUntil),
 
-    // 이번 주 신규 클레임 (날짜 기준)
+    // 이번 주 신규 클레임
     db.from("claims")
       .select("id, claim_date, client_name, claim_type, content, status, dept")
       .gte("claim_date", since)
+      .lte("claim_date", until)
       .order("claim_date", { ascending: false }),
 
     // 누적 미처리·처리중 클레임 (날짜 무관)
@@ -65,12 +102,13 @@ export default async function ReportPage() {
     db.from("claims")
       .select("id")
       .gte("claim_date", prevSince)
-      .lt("claim_date", prevUntil),
+      .lte("claim_date", prevUntil),
 
     // 팀별 주간 보고
     db.from("dept_reports")
       .select("id, report_date, dept, manager_name, rag_status, issue, next_action, coo_comment")
       .gte("report_date", since)
+      .lte("report_date", until)
       .order("report_date", { ascending: false }),
 
     // 비용 승인 대기
@@ -89,13 +127,14 @@ export default async function ReportPage() {
     db.from("deliveries")
       .select("delivery_date, customer_name, total_amount, status")
       .gte("delivery_date", since)
+      .lte("delivery_date", until)
       .order("delivery_date", { ascending: false }),
 
     // 전주 납품 (비교용)
     db.from("deliveries")
       .select("total_amount")
       .gte("delivery_date", prevSince)
-      .lt("delivery_date", prevUntil),
+      .lte("delivery_date", prevUntil),
 
     // 단가 맵용 products
     db.from("products")
@@ -149,6 +188,7 @@ export default async function ReportPage() {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 print:px-0 print:py-4">
         <WeeklyReport
           weekLabel={weekLabel}
+          weekOffset={weekOffset}
           since={since}
           until={until}
           production={production ?? []}
