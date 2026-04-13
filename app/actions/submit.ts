@@ -358,6 +358,10 @@ export async function submitDelivery(
   const session = await getSession();
   if (!session) return { success: false, error: "로그인 필요" };
 
+  // 금액 음수 검증
+  const hasNegative = items.some((it) => it.qty_kg < 0 || it.unit_price < 0 || it.amount < 0);
+  if (hasNegative) return { success: false, error: "수량·단가·금액은 0 이상이어야 합니다." };
+
   const totalAmount = items.reduce((s, it) => s + it.amount, 0);
   const db = createServerClient();
 
@@ -624,6 +628,8 @@ export async function updateFrozenInventoryRow(
 ) {
   const session = await getSession();
   if (!session) throw new Error("로그인 필요");
+  const canEdit = session.role === "coo" || session.role === "ceo" || session.role === "manager";
+  if (!canEdit) throw new Error("재고 수정 권한이 없습니다. (팀장 이상)");
   const db = createServerClient();
   const roleLabel: Record<string, string> = {
     coo: "COO", ceo: "대표", manager: "팀장", worker: "직원",
@@ -695,6 +701,8 @@ export async function saveFrozenInventory(
 ) {
   const session = await getSession();
   if (!session) throw new Error("로그인 필요");
+  const canEdit = session.role === "coo" || session.role === "ceo" || session.role === "manager";
+  if (!canEdit) throw new Error("재고 저장 권한이 없습니다. (팀장 이상)");
   const db = createServerClient();
   const rows = items.map((item) => ({ inventory_date: inventoryDate, ...item }));
   const { error } = await db.from("frozen_inventory").upsert(rows, {
@@ -714,13 +722,16 @@ export async function submitCostApprovalRequest(formData: FormData) {
     return { error: "팀장 이상 권한 필요" };
   }
 
+  const amount = Number(formData.get("amount")) || 0;
+  if (amount < 0) return { error: "금액은 0 이상이어야 합니다." };
+
   const db = createServerClient();
   const { error } = await db.from("cost_approvals").insert({
     title:        formData.get("title") as string,
     dept:         session.dept ?? session.role,
     requested_by: session.name,
     request_date: (formData.get("request_date") as string) || new Date().toISOString().split("T")[0],
-    amount:       Number(formData.get("amount")) || 0,
+    amount,
     status:       "pending",
   });
 
@@ -832,6 +843,8 @@ export async function saveStaffSalary(
   const session = await getSession();
   if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
 
+  if (baseSalary < 0) return { error: "기본급은 0 이상이어야 합니다." };
+
   const db = createServerClient();
   const { error } = await db.from("staff_salaries").upsert(
     {
@@ -870,6 +883,10 @@ export async function savePayrollMonth(
   if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
 
   const db = createServerClient();
+
+  // 금액 음수 검증
+  const hasNeg = records.some((r) => r.base_salary < 0 || r.total_pay < 0);
+  if (hasNeg) return { error: "급여 금액은 0 이상이어야 합니다." };
 
   // 급여 기록 일괄 upsert
   const rows = records.map((r) => ({
@@ -944,6 +961,9 @@ export async function recordMaterialPurchase(data: {
   if (!session || (session.role !== "coo" && session.role !== "manager")) {
     return { error: "COO/팀장 권한 필요" };
   }
+
+  if (data.quantity < 0) return { error: "수량은 0 이상이어야 합니다." };
+  if (data.unit_price < 0) return { error: "단가는 0 이상이어야 합니다." };
 
   const db         = createServerClient();
   const total_cost = Math.round(data.quantity * data.unit_price);
@@ -1035,6 +1055,8 @@ export async function recordPurchasePayment(data: {
   if (!session || (session.role !== "coo" && session.role !== "ceo")) {
     return { error: "COO/CEO 권한 필요" };
   }
+  if (data.amount < 0) return { error: "결제 금액은 0 이상이어야 합니다." };
+
   const db = createServerClient();
 
   // 1. purchase_payments 저장
@@ -1082,6 +1104,8 @@ export async function recordCashFlow(data: {
   if (!session || (session.role !== "coo" && session.role !== "ceo")) {
     return { error: "COO/CEO 권한 필요" };
   }
+  if (data.amount < 0) return { error: "금액은 0 이상이어야 합니다." };
+
   const db = createServerClient();
   const { error } = await db.from("cash_flow_ledger").insert({
     ...data,

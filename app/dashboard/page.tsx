@@ -466,7 +466,14 @@ export default async function DashboardPage({
 
         {/* ── KPI 카드 ── */}
         <section>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">핵심 지표</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">핵심 지표</h2>
+            {!fromDB && (
+              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-semibold animate-pulse">
+                ⚠️ 샘플 데이터 · 회계팀 KPI 입력 시 실제 수치로 대체됩니다
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <KPICard
               title={period === "today" ? "매출 (오늘)" : period === "week" ? "매출 (이번 주)" : months.length > 1 ? `매출 (${months.length}개월 합)` : "매출 (이번 달)"}
@@ -641,7 +648,10 @@ export default async function DashboardPage({
                   ${d.rag_status === "red" ? "bg-red-50" : d.rag_status === "yellow" ? "bg-amber-50" : ""}`}>
                 <div>
                   <span className="font-semibold text-gray-800">{d.name}</span>
-                  {d.fromDB && <div className="text-[10px] text-emerald-600 font-medium">● 팀장 보고</div>}
+                  {d.fromDB
+                    ? <div className="text-[10px] text-emerald-600 font-medium">● 팀장 보고</div>
+                    : <div className="text-[10px] text-gray-400 font-medium">○ 샘플</div>
+                  }
                 </div>
                 <span className={`font-semibold ${RAG_COLOR[d.rag_status] ?? "text-gray-600"}`}>
                   {RAG_DOT[d.rag_status]} {RAG_TEXT[d.rag_status]}

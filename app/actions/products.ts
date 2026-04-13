@@ -1,6 +1,16 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase";
+import { getSession } from "@/lib/auth";
+
+// ── 권한 체크 헬퍼 ─────────────────────────────────────────
+function canManageProducts(session: { role: string; dept?: string }) {
+  return (
+    session.role === "coo" ||
+    session.role === "ceo" ||
+    session.role === "manager"
+  );
+}
 
 export interface Product {
   id: string;
@@ -100,6 +110,10 @@ export async function upsertProduct(
   data: Omit<Product, "id"> & { id?: string }
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const session = await getSession();
+    if (!session) return { success: false, error: "로그인 필요" };
+    if (!canManageProducts(session)) return { success: false, error: "품목 수정 권한이 없습니다. (팀장 이상)" };
+
     const db = createServerClient();
     const payload = {
       code: data.code,
@@ -129,6 +143,10 @@ export async function upsertProduct(
 
 export async function deleteProduct(id: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const session = await getSession();
+    if (!session) return { success: false, error: "로그인 필요" };
+    if (!canManageProducts(session)) return { success: false, error: "품목 삭제 권한이 없습니다. (팀장 이상)" };
+
     const db = createServerClient();
     const { error } = await db
       .from("products")
@@ -159,6 +177,10 @@ export async function bulkUpsertProducts(
   rows: BulkProductRow[]
 ): Promise<{ success: boolean; count?: number; error?: string }> {
   try {
+    const session = await getSession();
+    if (!session) return { success: false, error: "로그인 필요" };
+    if (!canManageProducts(session)) return { success: false, error: "품목 일괄수정 권한이 없습니다. (팀장 이상)" };
+
     const db = createServerClient();
     const now = new Date().toISOString();
     const payload = rows.map((r) => ({
