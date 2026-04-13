@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import ScheduleCalendar from "@/components/ScheduleCalendar";
 import { createServerClient } from "@/lib/supabase";
+import type { LeaveBalance } from "@/lib/types/leave";
 
 export default async function SchedulePage({
   searchParams,
@@ -13,12 +14,11 @@ export default async function SchedulePage({
   if (!session) redirect("/login");
 
   const params = await searchParams;
-  const monthParam = params.month; // e.g. "2026-04"
+  const monthParam = params.month;
 
-  // Determine the year/month to display
   const now = new Date();
   let year: number;
-  let month: number; // 1-based
+  let month: number;
 
   if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
     const [y, m] = monthParam.split("-").map(Number);
@@ -30,52 +30,73 @@ export default async function SchedulePage({
   }
 
   const firstDay = `${year}-${String(month).padStart(2, "0")}-01`;
-  const lastDayDate = new Date(year, month, 0); // last day of month
+  const lastDayDate = new Date(year, month, 0);
   const lastDay = `${year}-${String(month).padStart(2, "0")}-${String(lastDayDate.getDate()).padStart(2, "0")}`;
 
   const db = createServerClient();
+  const thisYear = now.getFullYear();
 
-  // Fetch schedule events for the month
-  const { data: eventsRaw } = await db
-    .from("schedule_events")
-    .select("*")
-    .gte("event_date", firstDay)
-    .lte("event_date", lastDay)
-    .order("event_date", { ascending: true });
-
-  // Fetch approved vacations overlapping the month
-  const { data: vacationsRaw } = await db
-    .from("vacation_requests")
-    .select("*")
-    .eq("status", "approved")
-    .lte("start_date", lastDay)
-    .gte("end_date", firstDay)
-    .order("start_date", { ascending: true });
-
-  // Fetch pending vacation count
-  const { count: pendingCount } = await db
-    .from("vacation_requests")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "pending");
-
-  // Fetch all pending vacation requests (for approvers)
   const canApprove =
     session.role === "coo" ||
     session.role === "ceo" ||
     (session.role === "manager" && session.dept === "회계팀");
 
-  let pendingVacationsRaw: VacationRequest[] = [];
-  if (canApprove) {
-    const { data } = await db
-      .from("vacation_requests")
-      .select("*")
-      .eq("status", "pending")
-      .order("created_at", { ascending: true });
-    pendingVacationsRaw = (data ?? []) as VacationRequest[];
-  }
+  const canManage =
+    canApprove;
 
-  const events = (eventsRaw ?? []) as ScheduleEvent[];
-  const vacations = (vacationsRaw ?? []) as VacationRequest[];
+  const [
+    { data: eventsRaw },
+    { data: vacationsRaw },
+    { count: pendingCount },
+    pendingVacationsResult,
+    myBalanceResult,
+    allBalancesResult,
+  ] = await Promise.all([
+    db.from("schedule_events")
+      .select("*")
+      .gte("event_date", firstDay)
+      .lte("event_date", lastDay)
+      .order("event_date", { ascending: true }),
+
+    db.from("vacation_requests")
+      .select("*")
+      .eq("status", "approved")
+      .lte("start_date", lastDay)
+      .gte("end_date", firstDay)
+      .order("start_date", { ascending: true }),
+
+    db.from("vacation_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+
+    canApprove
+      ? db.from("vacation_requests")
+          .select("*")
+          .eq("status", "pending")
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] }),
+
+    // 본인 연차 잔여 (올해)
+    db.from("employee_leave_balances")
+      .select("*")
+      .eq("employee_id", session.id)
+      .eq("year", thisYear)
+      .single(),
+
+    // 전직원 잔여 (관리자만)
+    canManage
+      ? db.from("employee_leave_balances")
+          .select("*")
+          .eq("year", thisYear)
+          .order("dept", { ascending: true })
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const events     = (eventsRaw ?? []) as ScheduleEvent[];
+  const vacations  = (vacationsRaw ?? []) as VacationRequest[];
+  const pendingVac = (pendingVacationsResult.data ?? []) as VacationRequest[];
+  const myBalance  = (myBalanceResult.data ?? null) as LeaveBalance | null;
+  const allBalances = (allBalancesResult.data ?? []) as LeaveBalance[];
 
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
@@ -87,29 +108,38 @@ export default async function SchedulePage({
             <h1 className="text-lg font-bold text-gray-800">📅 공유 일정</h1>
             <p className="text-sm text-gray-500">일정 관리 및 휴가 신청/승인</p>
           </div>
+          <a
+            href="/schedule/leave"
+            className="text-xs bg-white border border-gray-200 text-[#1F3864] px-3 py-1.5 rounded-lg hover:bg-[#1F3864] hover:text-white transition-colors font-semibold"
+          >
+            📋 연차 현황
+          </a>
         </div>
 
         <ScheduleCalendar
           session={{
-            id: session.id,
+            id:   session.id,
             name: session.name,
             role: session.role,
             dept: session.dept,
           }}
           initialEvents={events}
           initialVacations={vacations}
-          initialPending={pendingVacationsRaw}
+          initialPending={pendingVac}
           pendingCount={pendingCount ?? 0}
           currentYear={year}
           currentMonth={month}
           canApprove={canApprove}
+          canManage={canManage}
+          myLeaveBalance={myBalance}
+          allLeaveBalances={allBalances}
         />
       </main>
     </div>
   );
 }
 
-// Types re-exported for use in this file
+// Types
 export interface ScheduleEvent {
   id: string;
   event_date: string;
@@ -135,6 +165,9 @@ export interface VacationRequest {
   start_date: string;
   end_date: string;
   days_count: number;
+  leave_type: string;
+  hours_count: number | null;
+  deducted_days: number;
   reason: string | null;
   status: string;
   approved_by: string | null;

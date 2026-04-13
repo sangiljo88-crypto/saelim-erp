@@ -10,6 +10,16 @@ import {
   approveVacation,
   type ScheduleCategory,
 } from "@/app/actions/schedule";
+import {
+  adjustLeaveBalance,
+  initLeaveBalancesForYear,
+} from "@/app/actions/leave";
+import {
+  calcDeductedDays,
+  LEAVE_TYPE_COLOR,
+  type LeaveType,
+  type LeaveBalance,
+} from "@/lib/types/leave";
 
 // ──────────────────────────────────────────────
 // Types
@@ -46,6 +56,9 @@ interface VacationRequest {
   start_date: string;
   end_date: string;
   days_count: number;
+  leave_type: string;
+  hours_count: number | null;
+  deducted_days: number;
   reason: string | null;
   status: string;
   approved_by: string | null;
@@ -64,6 +77,9 @@ interface Props {
   currentYear: number;
   currentMonth: number;
   canApprove: boolean;
+  canManage: boolean;
+  myLeaveBalance: LeaveBalance | null;
+  allLeaveBalances: LeaveBalance[];
 }
 
 // ──────────────────────────────────────────────
@@ -227,6 +243,9 @@ export default function ScheduleCalendar({
   currentYear,
   currentMonth,
   canApprove,
+  canManage,
+  myLeaveBalance,
+  allLeaveBalances,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -270,7 +289,19 @@ export default function ScheduleCalendar({
   const [vacStartDate, setVacStartDate] = useState("");
   const [vacEndDate, setVacEndDate] = useState("");
   const [vacReason, setVacReason] = useState("");
+  const [vacLeaveType, setVacLeaveType] = useState<LeaveType>("연차");
+  const [vacHours, setVacHours] = useState<number>(1);
   const [rejectReasonMap, setRejectReasonMap] = useState<Record<string, string>>({});
+
+  // 연차 관리 (관리자) state
+  const [balances, setBalances] = useState<LeaveBalance[]>(allLeaveBalances);
+  const [adjustTarget, setAdjustTarget] = useState<LeaveBalance | null>(null);
+  const [adjustDelta, setAdjustDelta] = useState<string>("");
+  const [adjustReason, setAdjustReason] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
+  const [initingYear, setInitingYear] = useState(false);
+
+  useEffect(() => { setBalances(allLeaveBalances); }, [allLeaveBalances]);
 
   const today = todayStr();
   const weeks = buildCalendarWeeks(currentYear, currentMonth);
@@ -424,33 +455,99 @@ export default function ScheduleCalendar({
     });
   }
 
+  // 반차/시간휴가는 end_date = start_date
+  const isHalfOrHour = vacLeaveType === "반차(오전)" || vacLeaveType === "반차(오후)" || vacLeaveType === "시간휴가";
+  const effectiveEndDate = isHalfOrHour ? vacStartDate : vacEndDate;
+  const previewDeducted = vacStartDate
+    ? calcDeductedDays(vacLeaveType, vacStartDate, effectiveEndDate || vacStartDate, vacLeaveType === "시간휴가" ? vacHours : null)
+    : 0;
+  const myRemaining = myLeaveBalance
+    ? Number(myLeaveBalance.total_days) - Number(myLeaveBalance.used_days)
+    : null;
+
   // Submit vacation request
   async function handleRequestVacation() {
-    if (!vacStartDate || !vacEndDate) {
-      showError("시작일과 종료일을 입력해주세요.");
+    if (!vacStartDate) {
+      showError("시작일을 입력해주세요.");
       return;
     }
-    if (vacStartDate > vacEndDate) {
+    if (!isHalfOrHour && !vacEndDate) {
+      showError("종료일을 입력해주세요.");
+      return;
+    }
+    if (!isHalfOrHour && vacStartDate > vacEndDate) {
       showError("종료일은 시작일 이후여야 합니다.");
       return;
     }
     startTransition(async () => {
       try {
         await requestVacation({
-          start_date: vacStartDate,
-          end_date: vacEndDate,
-          days_count: countDays(vacStartDate, vacEndDate),
-          reason: vacReason.trim() || null,
+          start_date:   vacStartDate,
+          end_date:     effectiveEndDate || vacStartDate,
+          leave_type:   vacLeaveType,
+          hours_count:  vacLeaveType === "시간휴가" ? vacHours : null,
+          reason:       vacReason.trim() || null,
         });
         setVacStartDate("");
         setVacEndDate("");
         setVacReason("");
-        showSuccess("휴가 신청이 완료되었습니다.");
+        setVacLeaveType("연차");
+        setVacHours(1);
+        showSuccess("휴가 신청이 완료되었습니다. 결재 대기 중입니다.");
         router.refresh();
       } catch (e) {
         showError(e instanceof Error ? e.message : "오류가 발생했습니다.");
       }
     });
+  }
+
+  // 연차 잔여 조정 (관리자)
+  async function handleAdjustBalance() {
+    if (!adjustTarget || !adjustDelta || !adjustReason.trim()) {
+      showError("조정 값과 사유를 모두 입력해주세요.");
+      return;
+    }
+    const delta = parseFloat(adjustDelta);
+    if (isNaN(delta) || delta === 0) {
+      showError("올바른 조정 값을 입력해주세요.");
+      return;
+    }
+    setAdjusting(true);
+    try {
+      await adjustLeaveBalance(adjustTarget.employee_id, adjustTarget.year, delta, adjustReason);
+      // 로컬 반영
+      setBalances((prev) =>
+        prev.map((b) =>
+          b.employee_id === adjustTarget.employee_id
+            ? { ...b, total_days: Math.max(0, Number(b.total_days) + delta) }
+            : b
+        )
+      );
+      setAdjustTarget(null);
+      setAdjustDelta("");
+      setAdjustReason("");
+      showSuccess("연차가 조정되었습니다. 이력이 기록되었습니다.");
+      router.refresh();
+    } catch (e) {
+      showError(e instanceof Error ? e.message : "오류 발생");
+    } finally {
+      setAdjusting(false);
+    }
+  }
+
+  // 전직원 초기화 (관리자)
+  async function handleInitBalances() {
+    if (!confirm(`${new Date().getFullYear()}년도 아직 연차 미등록 직원에게 15일을 부여합니다. 진행하시겠습니까?`)) return;
+    setInitingYear(true);
+    try {
+      const result = await initLeaveBalancesForYear(new Date().getFullYear());
+      showSuccess(`${result.count}명에게 연차 15일이 부여되었습니다.`);
+      router.refresh();
+    } catch (e) {
+      showError(e instanceof Error ? e.message : "오류 발생");
+    } finally {
+      setInitingYear(false);
+    }
   }
 
   // Approve or reject vacation
@@ -842,24 +939,86 @@ export default function ScheduleCalendar({
       {/* ── Vacation Request Form ── */}
       {tab === "vacation" && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-          <h3 className="font-bold text-gray-800 mb-4">휴가 신청</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-gray-800">휴가 신청</h3>
+            {myRemaining !== null && (
+              <div className={`text-xs font-semibold px-3 py-1.5 rounded-full ${
+                myRemaining > 5
+                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  : myRemaining > 0
+                  ? "bg-amber-50 text-amber-700 border border-amber-200"
+                  : "bg-red-50 text-red-700 border border-red-200"
+              }`}>
+                잔여 연차 <strong>{myRemaining.toFixed(1)}일</strong>
+                {myLeaveBalance && (
+                  <span className="text-gray-400 font-normal ml-1">
+                    / {Number(myLeaveBalance.total_days).toFixed(0)}일
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 휴가 종류 선택 */}
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-gray-600 mb-2">휴가 종류 *</label>
+            <div className="flex flex-wrap gap-2">
+              {(["연차", "반차(오전)", "반차(오후)", "시간휴가"] as LeaveType[]).map((lt) => (
+                <button
+                  key={lt}
+                  type="button"
+                  onClick={() => { setVacLeaveType(lt); setVacHours(1); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                    vacLeaveType === lt
+                      ? "bg-[#1F3864] text-white border-[#1F3864]"
+                      : "bg-white text-gray-600 border-gray-300 hover:border-[#1F3864] hover:text-[#1F3864]"
+                  }`}
+                >
+                  {lt === "연차" && "📅 연차"}
+                  {lt === "반차(오전)" && "🌅 반차(오전)"}
+                  {lt === "반차(오후)" && "🌇 반차(오후)"}
+                  {lt === "시간휴가" && "⏱️ 시간휴가"}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1.5">
+              {vacLeaveType === "연차" && "하루 1일 차감"}
+              {vacLeaveType === "반차(오전)" && "0.5일 차감 · 오전 반차"}
+              {vacLeaveType === "반차(오후)" && "0.5일 차감 · 오후 반차"}
+              {vacLeaveType === "시간휴가" && "시간 ÷ 8 차감 (예: 2시간 = 0.25일)"}
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                시작일 *
-              </label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">시작일 *</label>
               <DatePickerInput value={vacStartDate} onChange={setVacStartDate} required />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                종료일 *
-              </label>
-              <DatePickerInput value={vacEndDate} onChange={setVacEndDate} required min={vacStartDate} />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                사유 (선택)
-              </label>
+            {!isHalfOrHour && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">종료일 *</label>
+                <DatePickerInput value={vacEndDate} onChange={(v) => setVacEndDate(v)} required min={vacStartDate} />
+              </div>
+            )}
+            {vacLeaveType === "시간휴가" && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">사용 시간 *</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={8}
+                    value={vacHours}
+                    onChange={(e) => setVacHours(Math.min(8, Math.max(1, Number(e.target.value))))}
+                    className="w-20 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864] text-center"
+                  />
+                  <span className="text-sm text-gray-500">시간</span>
+                  <span className="text-xs text-gray-400">(최대 8시간)</span>
+                </div>
+              </div>
+            )}
+            <div className={isHalfOrHour && vacLeaveType !== "시간휴가" ? "" : "sm:col-span-2"}>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">사유 (선택)</label>
               <textarea
                 value={vacReason}
                 onChange={(e) => setVacReason(e.target.value)}
@@ -869,15 +1028,35 @@ export default function ScheduleCalendar({
               />
             </div>
           </div>
-          {vacStartDate && vacEndDate && vacStartDate <= vacEndDate && (
-            <p className="text-xs text-gray-500 mt-2">
-              총 {countDays(vacStartDate, vacEndDate)}일
-            </p>
+
+          {/* 차감 미리보기 */}
+          {vacStartDate && previewDeducted > 0 && (
+            <div className={`mt-3 px-4 py-3 rounded-xl flex items-center justify-between ${
+              myRemaining !== null && previewDeducted > myRemaining
+                ? "bg-red-50 border border-red-200"
+                : "bg-blue-50 border border-blue-200"
+            }`}>
+              <div className="text-sm">
+                <span className="text-gray-600">차감 예정: </span>
+                <strong className={myRemaining !== null && previewDeducted > myRemaining ? "text-red-600" : "text-[#1F3864]"}>
+                  {previewDeducted}일
+                </strong>
+                {myRemaining !== null && (
+                  <span className="text-gray-400 text-xs ml-2">
+                    → 신청 후 잔여: {(myRemaining - previewDeducted).toFixed(1)}일
+                  </span>
+                )}
+              </div>
+              {myRemaining !== null && previewDeducted > myRemaining && (
+                <span className="text-xs font-semibold text-red-600">잔여 부족</span>
+              )}
+            </div>
           )}
+
           <div className="mt-4">
             <button
               onClick={handleRequestVacation}
-              disabled={isPending}
+              disabled={isPending || (myRemaining !== null && previewDeducted > myRemaining && previewDeducted > 0)}
               className="bg-[#1F3864] text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-[#2a4a7f] disabled:opacity-50 transition-colors"
             >
               {isPending ? "신청 중..." : "휴가 신청"}
@@ -908,7 +1087,7 @@ export default function ScheduleCalendar({
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-gray-800 text-sm">
                           {v.requester_name}
                         </span>
@@ -917,9 +1096,19 @@ export default function ScheduleCalendar({
                             {v.dept}
                           </span>
                         )}
+                        {v.leave_type && (
+                          <span className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                            LEAVE_TYPE_COLOR[v.leave_type as LeaveType] ?? "bg-gray-100 text-gray-700"
+                          }`}>
+                            {v.leave_type}
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
-                        {v.start_date} ~ {v.end_date} ({v.days_count}일)
+                        {v.start_date}
+                        {v.end_date !== v.start_date ? ` ~ ${v.end_date}` : ""}
+                        {" "}({v.deducted_days}일 차감
+                        {v.leave_type === "시간휴가" && v.hours_count ? ` · ${v.hours_count}시간` : ""})
                       </div>
                       {v.reason && (
                         <div className="text-xs text-gray-600 mt-1">사유: {v.reason}</div>
@@ -967,6 +1156,199 @@ export default function ScheduleCalendar({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── 연차 잔여 관리 (관리자) ── */}
+      {tab === "vacation" && canManage && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div>
+              <h3 className="font-bold text-gray-800">📊 직원 연차 현황</h3>
+              <p className="text-xs text-gray-500 mt-0.5">연차 잔여를 조정하면 이력이 자동 기록됩니다</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href="/schedule/leave"
+                className="text-xs border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors font-semibold"
+              >
+                📋 이력 보기
+              </a>
+              <button
+                onClick={handleInitBalances}
+                disabled={initingYear}
+                className="text-xs bg-amber-500 text-white px-3 py-1.5 rounded-lg hover:bg-amber-600 disabled:opacity-50 transition-colors font-semibold"
+              >
+                {initingYear ? "처리 중..." : "🔄 미등록 직원 초기화"}
+              </button>
+            </div>
+          </div>
+
+          {balances.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              <p className="text-sm">등록된 연차 정보가 없습니다.</p>
+              <p className="text-xs mt-1">위 버튼을 눌러 직원 연차를 초기화하세요.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left py-2.5 px-3 text-xs font-semibold text-gray-500">직원</th>
+                    <th className="text-left py-2.5 px-3 text-xs font-semibold text-gray-500">부서</th>
+                    <th className="text-center py-2.5 px-3 text-xs font-semibold text-gray-500">총 연차</th>
+                    <th className="text-center py-2.5 px-3 text-xs font-semibold text-gray-500">사용</th>
+                    <th className="text-center py-2.5 px-3 text-xs font-semibold text-gray-500">잔여</th>
+                    <th className="text-center py-2.5 px-3 text-xs font-semibold text-gray-500">관리</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {balances.map((b) => {
+                    const remaining = Number(b.total_days) - Number(b.used_days);
+                    return (
+                      <tr key={b.employee_id} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-2.5 px-3 font-semibold text-gray-800">{b.employee_name}</td>
+                        <td className="py-2.5 px-3 text-gray-500 text-xs">{b.dept ?? "-"}</td>
+                        <td className="py-2.5 px-3 text-center text-gray-700">{Number(b.total_days).toFixed(0)}일</td>
+                        <td className="py-2.5 px-3 text-center text-orange-600">{Number(b.used_days).toFixed(1)}일</td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className={`font-semibold ${
+                            remaining > 5 ? "text-emerald-600"
+                            : remaining > 0 ? "text-amber-600"
+                            : "text-red-600"
+                          }`}>
+                            {remaining.toFixed(1)}일
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <button
+                            onClick={() => { setAdjustTarget(b); setAdjustDelta(""); setAdjustReason(""); }}
+                            className="text-xs text-[#1F3864] border border-[#1F3864]/30 px-2.5 py-1 rounded-lg hover:bg-[#1F3864] hover:text-white transition-colors font-semibold"
+                          >
+                            조정
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 연차 조정 모달 ── */}
+      {adjustTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={() => setAdjustTarget(null)}
+        >
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-gray-800">연차 조정</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {adjustTarget.employee_name} · {adjustTarget.dept ?? ""}
+                </p>
+              </div>
+              <button
+                onClick={() => setAdjustTarget(null)}
+                className="text-gray-400 hover:text-gray-600 text-2xl w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+              >
+                ×
+              </button>
+            </div>
+            <div className="px-6 py-5 flex flex-col gap-4">
+              {/* 현재 상태 */}
+              <div className="bg-gray-50 rounded-xl px-4 py-3 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className="text-xs text-gray-400 mb-0.5">총 연차</div>
+                  <div className="font-bold text-gray-700">{Number(adjustTarget.total_days).toFixed(0)}일</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400 mb-0.5">사용</div>
+                  <div className="font-bold text-orange-600">{Number(adjustTarget.used_days).toFixed(1)}일</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400 mb-0.5">잔여</div>
+                  <div className="font-bold text-emerald-600">
+                    {(Number(adjustTarget.total_days) - Number(adjustTarget.used_days)).toFixed(1)}일
+                  </div>
+                </div>
+              </div>
+              {/* 조정 값 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                  조정 값 * <span className="text-gray-400 font-normal">(양수=증가, 음수=감소)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAdjustDelta((prev) => {
+                      const n = parseFloat(prev || "0");
+                      return isNaN(n) ? "-1" : String(n - 1);
+                    })}
+                    className="w-9 h-9 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 font-bold text-lg flex items-center justify-center"
+                  >−</button>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={adjustDelta}
+                    onChange={(e) => setAdjustDelta(e.target.value)}
+                    placeholder="예: 1 또는 -1"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864] text-center"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAdjustDelta((prev) => {
+                      const n = parseFloat(prev || "0");
+                      return isNaN(n) ? "1" : String(n + 1);
+                    })}
+                    className="w-9 h-9 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 font-bold text-lg flex items-center justify-center"
+                  >+</button>
+                </div>
+                {adjustDelta && !isNaN(parseFloat(adjustDelta)) && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    조정 후 총 연차:{" "}
+                    <strong className="text-[#1F3864]">
+                      {Math.max(0, Number(adjustTarget.total_days) + parseFloat(adjustDelta)).toFixed(1)}일
+                    </strong>
+                  </p>
+                )}
+              </div>
+              {/* 사유 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">조정 사유 *</label>
+                <textarea
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  placeholder="예: 입사 2년차 추가 부여, 오류 수정 등"
+                  rows={2}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864] resize-none"
+                />
+              </div>
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  onClick={handleAdjustBalance}
+                  disabled={adjusting || !adjustDelta || !adjustReason.trim()}
+                  className="flex-1 bg-[#1F3864] text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-[#2a4a7f] disabled:opacity-50 transition-colors"
+                >
+                  {adjusting ? "저장 중..." : "💾 저장 (이력 기록됨)"}
+                </button>
+                <button
+                  onClick={() => setAdjustTarget(null)}
+                  className="px-5 py-2.5 text-gray-600 rounded-xl text-sm hover:bg-gray-100 transition-colors"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

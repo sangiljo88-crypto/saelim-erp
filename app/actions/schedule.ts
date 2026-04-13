@@ -3,6 +3,8 @@
 import { createServerClient } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { calcDeductedDays, type LeaveType } from "@/lib/types/leave";
+import { deductLeaveOnApproval, restoreLeaveOnReject } from "@/app/actions/leave";
 
 export type ScheduleCategory = "생산계획" | "품목계획" | "납품일정" | "회의" | "기타" | "일정";
 
@@ -29,7 +31,8 @@ export interface UpdateScheduleEventData {
 export interface RequestVacationData {
   start_date: string;
   end_date: string;
-  days_count?: number;
+  leave_type: LeaveType;
+  hours_count?: number | null;
   reason?: string | null;
 }
 
@@ -56,7 +59,6 @@ export async function createScheduleEvent(data: CreateScheduleEventData) {
 
   if (error) throw new Error(error.message);
   revalidatePath("/schedule");
-  // 생성된 이벤트 전체를 반환 → 클라이언트 즉시 반영
   return { success: true, event: created };
 }
 
@@ -66,7 +68,6 @@ export async function updateScheduleEvent(id: string, data: UpdateScheduleEventD
 
   const db = createServerClient();
 
-  // 권한 확인: 작성자이거나 coo/ceo만 수정 가능
   const { data: existing, error: fetchError } = await db
     .from("schedule_events")
     .select("created_by")
@@ -103,7 +104,6 @@ export async function deleteScheduleEvent(id: string) {
 
   const db = createServerClient();
 
-  // 권한 확인
   const { data: existing, error: fetchError } = await db
     .from("schedule_events")
     .select("created_by")
@@ -129,16 +129,53 @@ export async function requestVacation(data: RequestVacationData) {
   const session = await getSession();
   if (!session) throw new Error("로그인 필요");
 
+  const { start_date, end_date, leave_type, hours_count, reason } = data;
+
+  // 차감 일수 계산
+  const deducted = calcDeductedDays(leave_type, start_date, end_date, hours_count);
+
+  // 반차·시간휴가는 end_date = start_date 강제
+  const realEndDate =
+    leave_type === '반차(오전)' || leave_type === '반차(오후)' || leave_type === '시간휴가'
+      ? start_date
+      : end_date;
+
+  // days_count: 반차=0.5, 시간휴가=hours/8, 연차=날짜 수
+  const daysCount = deducted;
+
   const db = createServerClient();
+  const year = new Date(start_date).getFullYear();
+
+  // 잔여 연차 확인 (없으면 auto-init 15일)
+  const { data: bal } = await db
+    .from("employee_leave_balances")
+    .select("total_days, used_days")
+    .eq("employee_id", session.id)
+    .eq("year", year)
+    .single();
+
+  const totalDays = bal ? Number(bal.total_days) : 15;
+  const usedDays  = bal ? Number(bal.used_days)  : 0;
+  const remaining = totalDays - usedDays;
+
+  if (deducted > remaining) {
+    throw new Error(
+      `잔여 연차가 부족합니다. (신청: ${deducted}일, 잔여: ${remaining.toFixed(1)}일)`
+    );
+  }
+
   const { error } = await db.from("vacation_requests").insert({
-    requester_id: session.id,
+    requester_id:   session.id,
     requester_name: session.name,
-    dept: session.dept ?? null,
-    start_date: data.start_date,
-    end_date: data.end_date,
-    days_count: data.days_count ?? 1,
-    reason: data.reason ?? null,
-    status: "pending",
+    dept:           session.dept ?? null,
+    start_date,
+    end_date:       realEndDate,
+    days_count:     daysCount,
+    leave_type,
+    hours_count:    leave_type === '시간휴가' ? (hours_count ?? null) : null,
+    deducted_days:  deducted,
+    reason:         reason ?? null,
+    status:         "pending",
   });
 
   if (error) throw new Error(error.message);
@@ -154,7 +191,6 @@ export async function approveVacation(
   const session = await getSession();
   if (!session) throw new Error("로그인 필요");
 
-  // 권한: coo, ceo, 또는 manager+회계팀
   const canApprove =
     session.role === "coo" ||
     session.role === "ceo" ||
@@ -163,18 +199,53 @@ export async function approveVacation(
   if (!canApprove) throw new Error("승인 권한이 없습니다.");
 
   const db = createServerClient();
+
+  // 기존 상태 조회 (복구 처리용)
+  const { data: vac, error: fetchErr } = await db
+    .from("vacation_requests")
+    .select("requester_id, requester_name, dept, start_date, deducted_days, status")
+    .eq("id", id)
+    .single();
+
+  if (fetchErr || !vac) throw new Error("신청 건을 찾을 수 없습니다.");
+
   const { error } = await db
     .from("vacation_requests")
     .update({
       status,
-      approved_by: session.id,
-      approved_by_name: session.name,
-      approved_at: new Date().toISOString(),
-      reject_reason: status === "rejected" ? (reason ?? null) : null,
+      approved_by:       session.id,
+      approved_by_name:  session.name,
+      approved_at:       new Date().toISOString(),
+      reject_reason:     status === "rejected" ? (reason ?? null) : null,
     })
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+
+  const year = new Date(vac.start_date as string).getFullYear();
+  const deductedDays = Number(vac.deducted_days ?? 1);
+  const approverSession = { id: session.id, name: session.name };
+
+  if (status === "approved") {
+    // 승인: 연차 차감
+    await deductLeaveOnApproval(
+      db, id,
+      vac.requester_id as string,
+      vac.requester_name as string,
+      (vac.dept as string | null),
+      year, deductedDays, approverSession
+    );
+  } else if (status === "rejected" && vac.status === "approved") {
+    // 이미 승인됐던 건 반려 → 연차 복구
+    await restoreLeaveOnReject(
+      db, id,
+      vac.requester_id as string,
+      vac.requester_name as string,
+      (vac.dept as string | null),
+      year, deductedDays, approverSession
+    );
+  }
+
   revalidatePath("/schedule");
   return { success: true };
 }
