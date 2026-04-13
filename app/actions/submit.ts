@@ -3,6 +3,7 @@
 import { createServerClient } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export async function submitProductionLog(formData: FormData) {
   const session = await getSession();
@@ -287,6 +288,17 @@ export async function saveCostApproval(itemId: string, status: "approved" | "rej
     .eq("id", itemId);
 
   if (error) return { error: error.message };
+
+  await logAudit({
+    action: "update",
+    entityType: "cost_approval",
+    entityId: itemId,
+    changes: { status: { before: "pending", after: status } },
+    performedBy: session.id,
+    performedByName: session.name,
+    dept: session.dept,
+  });
+
   revalidatePath("/coo");
   return { success: true };
 }
@@ -637,6 +649,20 @@ export async function updateFrozenInventoryRow(
   const modified_by = `${session.name} (${roleLabel[session.role] ?? session.role})`;
   const { error } = await db.from("frozen_inventory").update({ ...updates, modified_by }).eq("id", id);
   if (error) throw new Error(error.message);
+
+  await logAudit({
+    action: "update",
+    entityType: "frozen_inventory",
+    entityId: id,
+    changes: {
+      prev_stock: { before: null, after: updates.prev_stock },
+      current_stock: { before: null, after: updates.current_stock },
+    },
+    performedBy: session.id,
+    performedByName: session.name,
+    dept: session.dept,
+  });
+
   revalidatePath("/inventory");
   revalidatePath("/coo");
   return { success: true };
@@ -709,6 +735,16 @@ export async function saveFrozenInventory(
     onConflict: "inventory_date,section,product_name",
   });
   if (error) throw new Error(error.message);
+
+  await logAudit({
+    action: "create",
+    entityType: "frozen_inventory",
+    entityName: `${items.length}건 재고 저장`,
+    performedBy: session.id,
+    performedByName: session.name,
+    dept: session.dept,
+  });
+
   revalidatePath("/team");
   revalidatePath("/inventory");
   revalidatePath("/coo");
@@ -859,6 +895,19 @@ export async function saveStaffSalary(
   );
 
   if (error) return { error: error.message };
+
+  await logAudit({
+    action: "update",
+    entityType: "staff_salary",
+    entityName: name,
+    changes: {
+      base_salary: { before: null, after: baseSalary },
+    },
+    performedBy: session.id,
+    performedByName: session.name,
+    dept: session.dept,
+  });
+
   revalidatePath("/staff");
   revalidatePath("/payroll");
   return { success: true };
@@ -978,6 +1027,20 @@ export async function recordMaterialPurchase(data: {
 
   if (error) return { error: error.message };
 
+  await logAudit({
+    action: "create",
+    entityType: "material_purchase",
+    entityName: data.material_name,
+    changes: {
+      quantity: { before: null, after: data.quantity },
+      unit_price: { before: null, after: data.unit_price },
+      total_cost: { before: null, after: total_cost },
+    },
+    performedBy: session.id,
+    performedByName: session.name,
+    dept: session.dept,
+  });
+
   // products.purchase_price 최신 단가로 자동 업데이트 (있는 경우)
   if (data.product_code) {
     await db
@@ -1081,6 +1144,19 @@ export async function recordPurchasePayment(data: {
     ref_type:         data.purchase_id ? "material_purchase" : null,
     ref_id:           data.purchase_id || null,
     recorded_by:      session.name,
+  });
+
+  await logAudit({
+    action: "create",
+    entityType: "purchase_payment",
+    entityName: data.supplier,
+    changes: {
+      amount: { before: null, after: data.amount },
+      payment_method: { before: null, after: data.payment_method },
+    },
+    performedBy: session.id,
+    performedByName: session.name,
+    dept: session.dept,
   });
 
   revalidatePath("/accounting");

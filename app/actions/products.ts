@@ -2,6 +2,7 @@
 
 import { createServerClient } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 
 // ── 권한 체크 헬퍼 ─────────────────────────────────────────
 function canManageProducts(session: { role: string; dept?: string }) {
@@ -135,6 +136,16 @@ export async function upsertProduct(
       .upsert(payload, { onConflict: "code" });
 
     if (error) return { success: false, error: error.message };
+
+    await logAudit({
+      action: "update",
+      entityType: "product",
+      entityName: data.name,
+      performedBy: session.id,
+      performedByName: session.name,
+      dept: session.dept,
+    });
+
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
@@ -154,6 +165,16 @@ export async function deleteProduct(id: string): Promise<{ success: boolean; err
       .eq("id", id);
 
     if (error) return { success: false, error: error.message };
+
+    await logAudit({
+      action: "delete",
+      entityType: "product",
+      entityId: id,
+      performedBy: session.id,
+      performedByName: session.name,
+      dept: session.dept,
+    });
+
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
@@ -203,6 +224,16 @@ export async function bulkUpsertProducts(
       .upsert(payload, { onConflict: "code" });
 
     if (error) return { success: false, error: error.message };
+
+    await logAudit({
+      action: "create",
+      entityType: "product",
+      entityName: `${rows.length}건 일괄등록`,
+      performedBy: session.id,
+      performedByName: session.name,
+      dept: session.dept,
+    });
+
     return { success: true, count: rows.length };
   } catch (e) {
     return { success: false, error: (e as Error).message };
