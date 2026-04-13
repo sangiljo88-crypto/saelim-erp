@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   createScheduleEvent,
@@ -206,6 +206,20 @@ export default function ScheduleCalendar({
   const [events, setEvents] = useState<ScheduleEvent[]>(initialEvents);
   const [vacations, setVacations] = useState<VacationRequest[]>(initialVacations);
   const [pendingVacations, setPendingVacations] = useState<VacationRequest[]>(initialPending);
+
+  // 이벤트 상세 팝업
+  const [popupEvent, setPopupEvent] = useState<ScheduleEvent | null>(null);
+  const [popupEditMode, setPopupEditMode] = useState(false);
+  const [popupTitle, setPopupTitle] = useState("");
+  const [popupDesc, setPopupDesc] = useState("");
+  const [popupCategory, setPopupCategory] = useState<ScheduleCategory>("일정");
+  const [popupStartDate, setPopupStartDate] = useState("");
+  const [popupEndDate, setPopupEndDate] = useState("");
+
+  // ── router.refresh() 후 서버 props 반영 (실시간 동기화) ──
+  useEffect(() => { setEvents(initialEvents); }, [initialEvents]);
+  useEffect(() => { setVacations(initialVacations); }, [initialVacations]);
+  useEffect(() => { setPendingVacations(initialPending); }, [initialPending]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -283,7 +297,7 @@ export default function ScheduleCalendar({
     }
     startTransition(async () => {
       try {
-        await createScheduleEvent({
+        const result = await createScheduleEvent({
           event_date: newEventDate,
           end_date: newEventEndDate || null,
           title: newEventTitle.trim(),
@@ -292,12 +306,74 @@ export default function ScheduleCalendar({
           dept: newEventDept.trim() || null,
           all_day: true,
         });
-        // Optimistic update - reload via router
-        router.refresh();
+        // 즉시 로컬 state 반영 (실시간 표시)
+        if (result.event) {
+          setEvents((prev) => [...prev, result.event as ScheduleEvent]);
+        }
+        router.refresh(); // 백그라운드 서버 동기화
         setShowAddForm(false);
         showSuccess("일정이 등록되었습니다.");
       } catch (e) {
         showError(e instanceof Error ? e.message : "오류가 발생했습니다.");
+      }
+    });
+  }
+
+  // 팝업 열기
+  function openPopup(ev: ScheduleEvent) {
+    setPopupEvent(ev);
+    setPopupEditMode(false);
+    setPopupTitle(ev.title);
+    setPopupDesc(ev.description ?? "");
+    setPopupCategory((ev.category as ScheduleCategory) ?? "일정");
+    setPopupStartDate(ev.event_date);
+    setPopupEndDate(ev.end_date ?? "");
+  }
+
+  // 팝업에서 저장
+  async function handlePopupSave() {
+    if (!popupEvent || !popupTitle.trim()) return;
+    startTransition(async () => {
+      try {
+        await updateScheduleEvent(popupEvent.id, {
+          title:       popupTitle.trim(),
+          description: popupDesc.trim() || null,
+          category:    popupCategory,
+          event_date:  popupStartDate,
+          end_date:    popupEndDate || null,
+        });
+        // 즉시 로컬 반영
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.id === popupEvent.id
+              ? { ...e, title: popupTitle.trim(), description: popupDesc.trim() || null,
+                  category: popupCategory, event_date: popupStartDate,
+                  end_date: popupEndDate || null }
+              : e
+          )
+        );
+        setPopupEvent(null);
+        router.refresh();
+        showSuccess("일정이 수정되었습니다.");
+      } catch (err) {
+        showError(err instanceof Error ? err.message : "오류가 발생했습니다.");
+      }
+    });
+  }
+
+  // 팝업에서 삭제
+  async function handlePopupDelete() {
+    if (!popupEvent) return;
+    if (!confirm("일정을 삭제하시겠습니까?")) return;
+    startTransition(async () => {
+      try {
+        await deleteScheduleEvent(popupEvent.id);
+        setEvents((prev) => prev.filter((e) => e.id !== popupEvent.id));
+        setPopupEvent(null);
+        router.refresh();
+        showSuccess("일정이 삭제되었습니다.");
+      } catch (err) {
+        showError(err instanceof Error ? err.message : "오류가 발생했습니다.");
       }
     });
   }
@@ -520,7 +596,8 @@ export default function ScheduleCalendar({
                       {dayEvents.slice(0, 3).map((ev) => (
                         <div
                           key={ev.id}
-                          className={`text-[10px] px-1 py-0.5 rounded truncate ${
+                          onClick={(e) => { e.stopPropagation(); openPopup(ev); }}
+                          className={`text-[10px] px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-75 transition-opacity ${
                             CATEGORY_STYLES[ev.category] ?? "bg-gray-100 text-gray-700"
                           }`}
                         >
@@ -866,6 +943,177 @@ export default function ScheduleCalendar({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── 이벤트 상세 팝업 모달 ─────────────────── */}
+      {popupEvent && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={() => { setPopupEvent(null); setPopupEditMode(false); }}
+        >
+          {/* 배경 블러 */}
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+          {/* 모달 카드 */}
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 상단 색상 헤더 */}
+            <div className={`px-6 pt-5 pb-4 rounded-t-2xl ${
+              CATEGORY_STYLES[popupEvent.category] ?? "bg-gray-100"
+            }`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  {!popupEditMode && (
+                    <div className="text-xs font-semibold opacity-70 mb-1">
+                      {popupEvent.category}
+                      {popupEvent.dept && ` · ${popupEvent.dept}`}
+                    </div>
+                  )}
+                  {popupEditMode ? (
+                    <input
+                      type="text"
+                      value={popupTitle}
+                      onChange={(e) => setPopupTitle(e.target.value)}
+                      className="w-full text-lg font-bold bg-white/80 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
+                      autoFocus
+                    />
+                  ) : (
+                    <h2 className="text-lg font-bold text-gray-900 leading-snug">
+                      {popupEvent.title}
+                    </h2>
+                  )}
+                </div>
+                <button
+                  onClick={() => { setPopupEvent(null); setPopupEditMode(false); }}
+                  className="text-gray-500 hover:text-gray-800 text-2xl leading-none shrink-0 mt-0.5 cursor-pointer"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            {/* 본문 */}
+            <div className="px-6 py-5 flex flex-col gap-4">
+
+              {/* 날짜 */}
+              {popupEditMode ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 block mb-1">시작일</label>
+                    <input type="date" value={popupStartDate}
+                      onChange={(e) => setPopupStartDate(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 block mb-1">종료일 (선택)</label>
+                    <input type="date" value={popupEndDate}
+                      onChange={(e) => setPopupEndDate(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30" />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <span>📅</span>
+                  <span className="font-medium">
+                    {popupEvent.event_date}
+                    {popupEvent.end_date && popupEvent.end_date !== popupEvent.event_date
+                      ? ` ~ ${popupEvent.end_date}` : ""}
+                  </span>
+                </div>
+              )}
+
+              {/* 카테고리 (수정 모드) */}
+              {popupEditMode && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 block mb-1">카테고리</label>
+                    <select value={popupCategory}
+                      onChange={(e) => setPopupCategory(e.target.value as ScheduleCategory)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30">
+                      {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* 내용 */}
+              {popupEditMode ? (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 block mb-1">내용</label>
+                  <textarea
+                    value={popupDesc}
+                    onChange={(e) => setPopupDesc(e.target.value)}
+                    rows={3}
+                    placeholder="내용을 입력하세요"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30 resize-none"
+                  />
+                </div>
+              ) : (
+                popupEvent.description && (
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-xl px-4 py-3">
+                    {popupEvent.description}
+                  </p>
+                )
+              )}
+
+              {/* 작성/수정 정보 */}
+              {!popupEditMode && (
+                <div className="flex items-center gap-4 text-xs text-gray-400 border-t border-gray-100 pt-3">
+                  <span>✍️ 작성: <strong className="text-gray-600">{popupEvent.created_by_name}</strong></span>
+                  {popupEvent.updated_by_name && (
+                    <span>🔧 수정: <strong className="text-gray-600">{popupEvent.updated_by_name}</strong></span>
+                  )}
+                  {popupEvent.updated_at && (
+                    <span className="ml-auto">{popupEvent.updated_at.slice(0, 16).replace("T", " ")}</span>
+                  )}
+                </div>
+              )}
+
+              {/* 버튼 영역 */}
+              {(session.id === popupEvent.created_by ||
+                session.role === "coo" ||
+                session.role === "ceo") && (
+                <div className="flex items-center gap-2 pt-1">
+                  {popupEditMode ? (
+                    <>
+                      <button
+                        onClick={handlePopupSave}
+                        disabled={isPending}
+                        className="flex-1 bg-[#1F3864] text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-[#2a4a7f] disabled:opacity-50 transition-colors cursor-pointer"
+                      >
+                        {isPending ? "저장 중…" : "💾 저장"}
+                      </button>
+                      <button
+                        onClick={() => setPopupEditMode(false)}
+                        className="px-5 py-2.5 text-sm text-gray-600 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+                      >
+                        취소
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => setPopupEditMode(true)}
+                        className="flex-1 border border-[#1F3864] text-[#1F3864] text-sm font-semibold py-2.5 rounded-xl hover:bg-[#1F3864] hover:text-white transition-colors cursor-pointer"
+                      >
+                        ✏️ 수정
+                      </button>
+                      <button
+                        onClick={handlePopupDelete}
+                        disabled={isPending}
+                        className="px-5 py-2.5 text-sm font-semibold text-red-500 border border-red-200 rounded-xl hover:bg-red-50 disabled:opacity-50 transition-colors cursor-pointer"
+                      >
+                        삭제
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

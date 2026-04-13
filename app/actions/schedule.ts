@@ -38,21 +38,26 @@ export async function createScheduleEvent(data: CreateScheduleEventData) {
   if (!session) throw new Error("로그인 필요");
 
   const db = createServerClient();
-  const { error } = await db.from("schedule_events").insert({
-    event_date: data.event_date,
-    end_date: data.end_date ?? null,
-    title: data.title,
-    description: data.description ?? null,
-    category: data.category ?? "일정",
-    dept: data.dept ?? null,
-    all_day: data.all_day ?? true,
-    created_by: session.id,
-    created_by_name: session.name,
-  });
+  const { data: created, error } = await db
+    .from("schedule_events")
+    .insert({
+      event_date:       data.event_date,
+      end_date:         data.end_date ?? null,
+      title:            data.title,
+      description:      data.description ?? null,
+      category:         data.category ?? "일정",
+      dept:             data.dept ?? null,
+      all_day:          data.all_day ?? true,
+      created_by:       session.id,
+      created_by_name:  session.name,
+    })
+    .select()
+    .single();
 
   if (error) throw new Error(error.message);
   revalidatePath("/schedule");
-  return { success: true };
+  // 생성된 이벤트 전체를 반환 → 클라이언트 즉시 반영
+  return { success: true, event: created };
 }
 
 export async function updateScheduleEvent(id: string, data: UpdateScheduleEventData) {
