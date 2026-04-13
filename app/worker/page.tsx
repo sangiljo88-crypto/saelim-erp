@@ -2,10 +2,34 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import WorkerForms from "@/components/WorkerForms";
+import { createServerClient } from "@/lib/supabase";
 
 export default async function WorkerPage() {
   const session = await getSession();
   if (!session || session.role !== "worker") redirect("/login");
+
+  const db    = createServerClient();
+  const today = new Date().toISOString().split("T")[0];
+
+  const [
+    { count: prodCount },
+    { count: hygieneCount },
+  ] = await Promise.all([
+    // 오늘 이 직원이 생산일지 제출했는지
+    db.from("production_logs")
+      .select("*", { count: "exact", head: true })
+      .eq("work_date", today)
+      .eq("worker_id", session.id),
+
+    // 오늘 이 직원이 위생점검 제출했는지
+    db.from("hygiene_checks")
+      .select("*", { count: "exact", head: true })
+      .eq("check_date", today)
+      .eq("worker_id", session.id),
+  ]);
+
+  const todayProduction = (prodCount ?? 0) > 0;
+  const todayHygiene    = (hygieneCount ?? 0) > 0;
 
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
@@ -20,7 +44,11 @@ export default async function WorkerPage() {
           <span className="text-xs bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full font-semibold">작업자</span>
         </div>
 
-        <WorkerForms dept={session.dept ?? ""} />
+        <WorkerForms
+          dept={session.dept ?? ""}
+          todayProduction={todayProduction}
+          todayHygiene={todayHygiene}
+        />
 
         <footer className="text-center text-xs text-gray-400 py-4 border-t border-gray-200">
           새림 ERP v1.0

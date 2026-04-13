@@ -4,7 +4,11 @@ import { useState, useRef } from "react";
 import { submitProductionLog, submitHygieneCheck, submitClaim } from "@/app/actions/submit";
 import DeliveryForm from "@/components/DeliveryForm";
 
-interface Props { dept: string }
+interface Props {
+  dept: string;
+  todayProduction?: boolean;
+  todayHygiene?: boolean;
+}
 
 const PRODUCT_CATALOG = [
   { id: "p01", name: "돼지 머리",   category: "부산물", unit: "두" },
@@ -56,7 +60,7 @@ const TAB_LABELS: Record<"production" | "hygiene" | "claim" | "delivery", string
   delivery:   "🚚 납품전표",
 };
 
-export default function WorkerForms({ dept }: Props) {
+export default function WorkerForms({ dept, todayProduction = false, todayHygiene = false }: Props) {
   const tabs = DEPT_TABS[dept] ?? ["hygiene", "claim"];
   const [activeForm, setActiveForm] = useState<"production" | "hygiene" | "claim" | "delivery">(tabs[0]);
   const [submitted, setSubmitted] = useState<string | null>(null);
@@ -78,6 +82,12 @@ export default function WorkerForms({ dept }: Props) {
     );
   }
 
+  // 탭별 기제출 여부
+  const submittedMap: Partial<Record<"production" | "hygiene" | "claim" | "delivery", boolean>> = {
+    production: todayProduction,
+    hygiene:    todayHygiene,
+  };
+
   return (
     <div className="flex flex-col gap-4">
       {/* 부서 안내 */}
@@ -92,10 +102,15 @@ export default function WorkerForms({ dept }: Props) {
       >
         {tabs.map((f) => (
           <button key={f} onClick={() => { setActiveForm(f); setError(null); }}
-            className={`py-2.5 rounded-lg text-xs font-semibold transition-colors ${
+            className={`py-2.5 rounded-lg text-xs font-semibold transition-colors relative ${
               activeForm === f ? "bg-[#1F3864] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
             }`}>
             {TAB_LABELS[f]}
+            {submittedMap[f] && (
+              <span className={`ml-1 text-[10px] font-bold ${activeForm === f ? "text-emerald-300" : "text-emerald-500"}`}>
+                ✅
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -107,10 +122,18 @@ export default function WorkerForms({ dept }: Props) {
       )}
 
       {activeForm === "production" && (
-        <ProductionForm onSuccess={() => handleSuccess("생산일지")} onError={handleError} />
+        <ProductionForm
+          onSuccess={() => handleSuccess("생산일지")}
+          onError={handleError}
+          todaySubmitted={todayProduction}
+        />
       )}
       {activeForm === "hygiene" && (
-        <HygieneForm onSuccess={() => handleSuccess("위생점검")} onError={handleError} />
+        <HygieneForm
+          onSuccess={() => handleSuccess("위생점검")}
+          onError={handleError}
+          todaySubmitted={todayHygiene}
+        />
       )}
       {activeForm === "claim" && (
         <ClaimForm onSuccess={() => handleSuccess("클레임")} onError={handleError} />
@@ -127,11 +150,19 @@ export default function WorkerForms({ dept }: Props) {
 }
 
 /* ─── 생산일지 ─── */
-function ProductionForm({ onSuccess, onError }: { onSuccess: () => void; onError: (m: string) => void }) {
+function ProductionForm({
+  onSuccess, onError, todaySubmitted = false,
+}: {
+  onSuccess: () => void;
+  onError: (m: string) => void;
+  todaySubmitted?: boolean;
+}) {
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
   const [category, setCategory] = useState("전체");
   const [customMode, setCustomMode] = useState(false);
   const [customName, setCustomName] = useState("");
+  const [inputQty, setInputQty] = useState("");
+  const [outputQty, setOutputQty] = useState("");
   const [loading, setLoading] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -139,6 +170,18 @@ function ProductionForm({ onSuccess, onError }: { onSuccess: () => void; onError
   const activeProduct = PRODUCT_CATALOG.find((p) => p.id === selectedProduct);
   const unit = customMode ? "kg" : (activeProduct?.unit ?? "kg");
   const canSubmit = customMode ? !!customName : !!selectedProduct;
+
+  // ── 실시간 수율 계산
+  const inputNum  = parseFloat(inputQty)  || 0;
+  const outputNum = parseFloat(outputQty) || 0;
+  const yieldRate = inputNum > 0 && outputNum > 0
+    ? Math.round((outputNum / inputNum) * 1000) / 10
+    : null;
+  const yieldStyle =
+    yieldRate === null ? null
+    : yieldRate >= 92  ? { bg: "bg-emerald-50 border-emerald-300", text: "text-emerald-700", msg: `✅ 목표(92%) 달성` }
+    : yieldRate >= 88  ? { bg: "bg-amber-50 border-amber-300",     text: "text-amber-700",   msg: `⚠️ 목표 미달` }
+    :                    { bg: "bg-red-50 border-red-300",          text: "text-red-600",     msg: `🚨 기준(88%) 미달 — 이슈 확인 필요` };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -160,6 +203,14 @@ function ProductionForm({ onSuccess, onError }: { onSuccess: () => void; onError
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-col gap-5">
       <h2 className="font-bold text-gray-800">생산일지 입력</h2>
+
+      {/* 오늘 이미 제출 배너 */}
+      {todaySubmitted && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700 flex items-center gap-2">
+          <span className="text-base">✅</span>
+          <span>오늘 생산일지를 이미 제출했습니다. <span className="font-normal text-emerald-600">(추가 입력도 가능합니다)</span></span>
+        </div>
+      )}
 
       <Field label="작업 날짜" type="date" name="date" defaultValue={new Date().toISOString().split("T")[0]} />
 
@@ -219,14 +270,39 @@ function ProductionForm({ onSuccess, onError }: { onSuccess: () => void; onError
         )}
       </div>
 
-      {/* 수량 */}
+      {/* 수량 — 투입/산출은 controlled (수율 계산용) */}
       <div className="grid grid-cols-2 gap-3">
-        <Field label={`원료 투입량 (${unit})`} type="number" name="input_qty"  placeholder="예: 1500" />
-        <Field label={`완성품 생산량 (${unit})`} type="number" name="output_qty" placeholder="예: 1380" />
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-gray-700">원료 투입량 ({unit})</label>
+          <input
+            type="number" name="input_qty" value={inputQty} placeholder="예: 1500"
+            onChange={(e) => setInputQty(e.target.value)}
+            className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#1F3864] outline-none"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-gray-700">완성품 생산량 ({unit})</label>
+          <input
+            type="number" name="output_qty" value={outputQty} placeholder="예: 1380"
+            onChange={(e) => setOutputQty(e.target.value)}
+            className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#1F3864] outline-none"
+          />
+        </div>
       </div>
+
+      {/* 실시간 수율 표시 */}
+      {yieldStyle && yieldRate !== null && (
+        <div className={`flex items-center justify-between border rounded-xl px-4 py-3 ${yieldStyle.bg}`}>
+          <span className={`text-sm font-bold ${yieldStyle.text}`}>
+            현재 수율: {yieldRate}%
+          </span>
+          <span className={`text-xs font-semibold ${yieldStyle.text}`}>{yieldStyle.msg}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
-        <Field label={`폐기량 (${unit})`}       type="number" name="waste_qty"  placeholder="예: 30" />
-        <Field label="포장재 사용량 (개)"        type="number" name="pack_qty"   placeholder="예: 200" />
+        <Field label={`폐기량 (${unit})`}    type="number" name="waste_qty" placeholder="예: 30" />
+        <Field label="포장재 사용량 (개)"     type="number" name="pack_qty"  placeholder="예: 200" />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -244,7 +320,13 @@ function ProductionForm({ onSuccess, onError }: { onSuccess: () => void; onError
 }
 
 /* ─── 위생점검 ─── */
-function HygieneForm({ onSuccess, onError }: { onSuccess: () => void; onError: (m: string) => void }) {
+function HygieneForm({
+  onSuccess, onError, todaySubmitted = false,
+}: {
+  onSuccess: () => void;
+  onError: (m: string) => void;
+  todaySubmitted?: boolean;
+}) {
   const [checked, setChecked] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(HYGIENE_ITEMS.map((item) => [item, false]))
   );
@@ -271,6 +353,14 @@ function HygieneForm({ onSuccess, onError }: { onSuccess: () => void; onError: (
         <h2 className="font-bold text-gray-800">위생 점검 체크리스트</h2>
         <span className="text-xs font-semibold text-gray-500">{passedCount}/{HYGIENE_ITEMS.length}</span>
       </div>
+
+      {/* 오늘 이미 제출 배너 */}
+      {todaySubmitted && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700 flex items-center gap-2">
+          <span className="text-base">✅</span>
+          <span>오늘 위생점검을 이미 제출했습니다. <span className="font-normal text-emerald-600">(추가 입력도 가능합니다)</span></span>
+        </div>
+      )}
 
       {HYGIENE_ITEMS.map((item) => (
         <button key={item} type="button" onClick={() => setChecked((p) => ({ ...p, [item]: !p[item] }))}

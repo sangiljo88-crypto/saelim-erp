@@ -95,6 +95,12 @@ export default async function DashboardPage({
   const [y, m] = thisMonth.split("-").map(Number);
   const nextMonthStart = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
 
+  // 이번 주 월요일 계산 (지금 이 순간용)
+  const nowDay = new Date().getDay();
+  const thisWeekMon = new Date();
+  thisWeekMon.setDate(new Date().getDate() - (nowDay === 0 ? 6 : nowDay - 1));
+  const thisWeekStart = thisWeekMon.toISOString().split("T")[0];
+
   const [
     { data: dbActionItems },
     { count: periodClaimsCount },
@@ -109,6 +115,10 @@ export default async function DashboardPage({
     { data: utilityRecent },
     { data: materialPurchases },
     { data: payrollData },
+    // ── 지금 이 순간 새림 ──
+    { data: todayYieldRows },
+    { count: weekClaimsCount },
+    { count: pendingApprovalsCount },
   ] = await Promise.all([
     db.from("action_items").select("id,title,dept,deadline,status").order("deadline"),
 
@@ -172,6 +182,18 @@ export default async function DashboardPage({
     db.from("payroll_records")
       .select("total_pay")
       .eq("year_month", thisMonth),
+
+    // 오늘 수율 (지금 이 순간)
+    db.from("production_logs").select("yield_rate")
+      .eq("work_date", today),
+
+    // 이번 주 클레임 수 (월~오늘, 고정)
+    db.from("claims").select("*", { count: "exact", head: true })
+      .gte("claim_date", thisWeekStart).lte("claim_date", today),
+
+    // 미결 비용결재 수
+    db.from("cost_approvals").select("*", { count: "exact", head: true })
+      .eq("status", "pending"),
   ]);
 
   // ── KPI 집계 ─────────────────────────────────────────────
@@ -205,6 +227,13 @@ export default async function DashboardPage({
   const avgYield = yieldRows?.length
     ? Math.round(yieldRows.reduce((s, r) => s + (r.yield_rate ?? 0), 0) / yieldRows.length * 10) / 10
     : null;
+
+  // ── 지금 이 순간 새림 집계 ────────────────────────────────
+  const todayAvgYield = todayYieldRows?.length
+    ? Math.round(todayYieldRows.reduce((s, r) => s + (r.yield_rate ?? 0), 0) / todayYieldRows.length * 10) / 10
+    : null;
+  const thisWeekClaims = weekClaimsCount ?? 0;
+  const pendingApprovals = pendingApprovalsCount ?? 0;
 
   // ── 생산 요약 ─────────────────────────────────────────────
   const totalOutput  = prodRows?.reduce((s, r) => s + (r.output_qty ?? 0), 0) ?? 0;
@@ -341,6 +370,99 @@ export default async function DashboardPage({
             </a>
           ))}
         </div>
+
+        {/* ── 지금 이 순간 새림 ── */}
+        <section>
+          <h2 className="text-base font-bold text-gray-800 mb-3">📊 지금 이 순간 새림</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+            {/* 오늘 수율 */}
+            <div className={`rounded-2xl border p-5 flex flex-col gap-2 ${
+              todayAvgYield === null ? "bg-white border-gray-200"
+              : todayAvgYield >= 92  ? "bg-emerald-50 border-emerald-200"
+              : todayAvgYield >= 88  ? "bg-amber-50 border-amber-200"
+              :                        "bg-red-50 border-red-200"
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">오늘 수율</span>
+                <span className="text-lg">
+                  {todayAvgYield === null ? "⚪" : todayAvgYield >= 92 ? "🟢" : todayAvgYield >= 88 ? "🟡" : "🔴"}
+                </span>
+              </div>
+              <div className={`text-4xl font-black tracking-tight ${
+                todayAvgYield === null ? "text-gray-300"
+                : todayAvgYield >= 92  ? "text-emerald-600"
+                : todayAvgYield >= 88  ? "text-amber-600"
+                :                        "text-red-600"
+              }`}>
+                {todayAvgYield !== null ? `${todayAvgYield}%` : "–"}
+              </div>
+              <div className={`text-xs font-medium ${
+                todayAvgYield === null ? "text-gray-400"
+                : todayAvgYield >= 92  ? "text-emerald-600"
+                : todayAvgYield >= 88  ? "text-amber-600"
+                :                        "text-red-600"
+              }`}>
+                {todayAvgYield === null ? "오늘 생산 데이터 없음"
+                : todayAvgYield >= 92  ? "✅ 목표(92%) 달성"
+                : todayAvgYield >= 88  ? "⚠️ 목표 미달 — 확인 필요"
+                :                        "🚨 기준(88%) 미달 — 즉시 조치"}
+              </div>
+            </div>
+
+            {/* 이번 주 클레임 */}
+            <div className={`rounded-2xl border p-5 flex flex-col gap-2 ${
+              thisWeekClaims === 0 ? "bg-emerald-50 border-emerald-200"
+              : thisWeekClaims <= 3 ? "bg-amber-50 border-amber-200"
+              :                       "bg-red-50 border-red-200"
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">이번 주 클레임</span>
+                <span className="text-lg">
+                  {thisWeekClaims === 0 ? "🟢" : thisWeekClaims <= 3 ? "🟡" : "🔴"}
+                </span>
+              </div>
+              <div className={`text-4xl font-black tracking-tight ${
+                thisWeekClaims === 0 ? "text-emerald-600"
+                : thisWeekClaims <= 3 ? "text-amber-600"
+                :                       "text-red-600"
+              }`}>
+                {thisWeekClaims}건
+              </div>
+              <div className={`text-xs font-medium ${
+                thisWeekClaims === 0 ? "text-emerald-600"
+                : thisWeekClaims <= 3 ? "text-amber-600"
+                :                       "text-red-600"
+              }`}>
+                {thisWeekClaims === 0 ? "✅ 이번 주 클레임 없음"
+                : thisWeekClaims <= 3 ? "⚠️ 클레임 처리 확인 필요"
+                :                       "🚨 클레임 다수 — 즉시 확인"}
+              </div>
+            </div>
+
+            {/* 미결 비용결재 */}
+            <div className={`rounded-2xl border p-5 flex flex-col gap-2 ${
+              pendingApprovals === 0 ? "bg-emerald-50 border-emerald-200"
+              :                        "bg-red-50 border-red-200"
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">미결 비용결재</span>
+                <span className="text-lg">{pendingApprovals === 0 ? "🟢" : "🔴"}</span>
+              </div>
+              <div className={`text-4xl font-black tracking-tight ${
+                pendingApprovals === 0 ? "text-emerald-600" : "text-red-600"
+              }`}>
+                {pendingApprovals}건
+              </div>
+              <div className={`text-xs font-medium ${
+                pendingApprovals === 0 ? "text-emerald-600" : "text-red-600"
+              }`}>
+                {pendingApprovals === 0 ? "✅ 미결 결재 없음" : "🚨 즉시 처리 필요"}
+              </div>
+            </div>
+
+          </div>
+        </section>
 
         {/* ── KPI 카드 ── */}
         <section>
