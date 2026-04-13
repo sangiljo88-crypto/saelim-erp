@@ -776,14 +776,24 @@ export default function ScheduleCalendar({
                   {/* Vacation tab: approved vacation bars */}
                   {tab === "vacation" && (
                     <div className="flex flex-col gap-0.5">
-                      {dayVacations.slice(0, 3).map((v) => (
-                        <div
-                          key={v.id}
-                          className="text-[10px] px-1 py-0.5 rounded truncate bg-orange-100 text-orange-700"
-                        >
-                          {v.requester_name}
-                        </div>
-                      ))}
+                      {dayVacations.slice(0, 3).map((v) => {
+                        const lt = v.leave_type;
+                        const leaveLabel = !lt || lt === "연차" ? "연차"
+                          : lt === "반차(오전)" ? "오전반차"
+                          : lt === "반차(오후)" ? "오후반차"
+                          : lt === "시간휴가" ? `${v.hours_count ?? "?"}시간`
+                          : lt;
+                        const colorClass = lt === "반차(오전)" ? "bg-purple-100 text-purple-700"
+                          : lt === "반차(오후)" ? "bg-indigo-100 text-indigo-700"
+                          : lt === "시간휴가" ? "bg-amber-100 text-amber-700"
+                          : "bg-orange-100 text-orange-700";
+                        return (
+                          <div key={v.id} className={`text-[10px] px-1 py-0.5 rounded truncate flex items-center gap-0.5 ${colorClass}`}>
+                            <span className="truncate font-medium">{v.requester_name}</span>
+                            <span className="opacity-60 shrink-0">·{leaveLabel}</span>
+                          </div>
+                        );
+                      })}
                       {dayVacations.length > 3 && (
                         <div className="text-[10px] text-gray-400 pl-1">
                           +{dayVacations.length - 3}더
