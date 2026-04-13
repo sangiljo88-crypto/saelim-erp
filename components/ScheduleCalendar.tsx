@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback, useEffect } from "react";
+import { useState, useTransition, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   createScheduleEvent,
@@ -64,6 +64,38 @@ interface Props {
   currentYear: number;
   currentMonth: number;
   canApprove: boolean;
+}
+
+// ──────────────────────────────────────────────
+// DatePickerInput — 어디 클릭해도 달력 팝업 오픈
+// ──────────────────────────────────────────────
+function DatePickerInput({
+  value, onChange, required = false, id, min,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+  id?: string;
+  min?: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <div
+      className="w-full border border-gray-300 rounded-lg overflow-hidden cursor-pointer hover:border-[#1F3864] transition-colors focus-within:border-[#1F3864] focus-within:ring-2 focus-within:ring-[#1F3864]/20"
+      onClick={() => { ref.current?.focus(); ref.current?.showPicker?.(); }}
+    >
+      <input
+        ref={ref}
+        id={id}
+        type="date"
+        required={required}
+        min={min}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-3 py-2 text-sm focus:outline-none bg-transparent cursor-pointer"
+      />
+    </div>
+  );
 }
 
 // ──────────────────────────────────────────────
@@ -550,9 +582,13 @@ export default function ScheduleCalendar({
               return (
                 <div
                   key={dateStr}
-                  onClick={() =>
-                    setSelectedDay(isSelected ? null : dateStr)
-                  }
+                  onClick={() => {
+                    if (tab === "schedule" && isThisMonth) {
+                      openAddFormForDay(dateStr);
+                    } else {
+                      setSelectedDay(isSelected ? null : dateStr);
+                    }
+                  }}
                   className={`min-h-[72px] sm:min-h-[88px] p-1 rounded-lg cursor-pointer transition-colors border ${
                     isSelected
                       ? "border-[#1F3864] bg-blue-50"
@@ -649,108 +685,106 @@ export default function ScheduleCalendar({
         )}
       </div>
 
-      {/* ── Add Event Form ── */}
+      {/* ── Add Event Modal Popup ── */}
       {tab === "schedule" && showAddForm && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-gray-800">일정 추가</h3>
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="text-gray-400 hover:text-gray-600 text-xl leading-none"
-            >
-              ×
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                시작일 *
-              </label>
-              <input
-                type="date"
-                value={newEventDate}
-                onChange={(e) => setNewEventDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                종료일 (선택)
-              </label>
-              <input
-                type="date"
-                value={newEventEndDate}
-                onChange={(e) => setNewEventEndDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864]"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                제목 *
-              </label>
-              <input
-                type="text"
-                value={newEventTitle}
-                onChange={(e) => setNewEventTitle(e.target.value)}
-                placeholder="일정 제목을 입력하세요"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864]"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                내용 (선택)
-              </label>
-              <textarea
-                value={newEventDesc}
-                onChange={(e) => setNewEventDesc(e.target.value)}
-                placeholder="상세 내용을 입력하세요"
-                rows={2}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864] resize-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                카테고리
-              </label>
-              <select
-                value={newEventCategory}
-                onChange={(e) => setNewEventCategory(e.target.value as ScheduleCategory)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864]"
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowAddForm(false)}
+        >
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 모달 헤더 */}
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-gray-800 text-base">일정 추가</h3>
+                {addFormDate && (
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    📅 {addFormDate}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setShowAddForm(false)}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
               >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+                ×
+              </button>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
-                부서 (선택, 비워두면 전사 공유)
-              </label>
-              <input
-                type="text"
-                value={newEventDept}
-                onChange={(e) => setNewEventDept(e.target.value)}
-                placeholder="예: 생산팀"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864]"
-              />
+
+            {/* 모달 본문 */}
+            <div className="px-6 py-5 flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">시작일 *</label>
+                  <DatePickerInput value={newEventDate} onChange={setNewEventDate} required />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">종료일 (선택)</label>
+                  <DatePickerInput value={newEventEndDate} onChange={setNewEventEndDate} min={newEventDate} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">제목 *</label>
+                <input
+                  type="text"
+                  value={newEventTitle}
+                  onChange={(e) => setNewEventTitle(e.target.value)}
+                  placeholder="일정 제목을 입력하세요"
+                  autoFocus
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864] focus:ring-2 focus:ring-[#1F3864]/20"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">내용 (선택)</label>
+                <textarea
+                  value={newEventDesc}
+                  onChange={(e) => setNewEventDesc(e.target.value)}
+                  placeholder="상세 내용을 입력하세요"
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864] focus:ring-2 focus:ring-[#1F3864]/20 resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">카테고리</label>
+                  <select
+                    value={newEventCategory}
+                    onChange={(e) => setNewEventCategory(e.target.value as ScheduleCategory)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864]"
+                  >
+                    {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">부서 (선택, 비워두면 전사)</label>
+                  <input
+                    type="text"
+                    value={newEventDept}
+                    onChange={(e) => setNewEventDept(e.target.value)}
+                    placeholder="예: 생산팀"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864]"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  onClick={handleCreateEvent}
+                  disabled={isPending}
+                  className="flex-1 bg-[#1F3864] text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-[#2a4a7f] disabled:opacity-50 transition-colors"
+                >
+                  {isPending ? "저장 중..." : "저장"}
+                </button>
+                <button
+                  onClick={() => setShowAddForm(false)}
+                  className="px-5 py-2.5 text-gray-600 rounded-xl text-sm hover:bg-gray-100 transition-colors"
+                >
+                  취소
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3 mt-4">
-            <button
-              onClick={handleCreateEvent}
-              disabled={isPending}
-              className="bg-[#1F3864] text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-[#2a4a7f] disabled:opacity-50 transition-colors"
-            >
-              {isPending ? "저장 중..." : "저장"}
-            </button>
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="text-gray-600 px-5 py-2 rounded-lg text-sm hover:bg-gray-100 transition-colors"
-            >
-              취소
-            </button>
           </div>
         </div>
       )}
@@ -814,23 +848,13 @@ export default function ScheduleCalendar({
               <label className="block text-xs font-semibold text-gray-600 mb-1">
                 시작일 *
               </label>
-              <input
-                type="date"
-                value={vacStartDate}
-                onChange={(e) => setVacStartDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864]"
-              />
+              <DatePickerInput value={vacStartDate} onChange={setVacStartDate} required />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">
                 종료일 *
               </label>
-              <input
-                type="date"
-                value={vacEndDate}
-                onChange={(e) => setVacEndDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864]"
-              />
+              <DatePickerInput value={vacEndDate} onChange={setVacEndDate} required min={vacStartDate} />
             </div>
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-gray-600 mb-1">
@@ -1003,15 +1027,11 @@ export default function ScheduleCalendar({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 block mb-1">시작일</label>
-                    <input type="date" value={popupStartDate}
-                      onChange={(e) => setPopupStartDate(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30" />
+                    <DatePickerInput value={popupStartDate} onChange={setPopupStartDate} />
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 block mb-1">종료일 (선택)</label>
-                    <input type="date" value={popupEndDate}
-                      onChange={(e) => setPopupEndDate(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30" />
+                    <DatePickerInput value={popupEndDate} onChange={setPopupEndDate} min={popupStartDate} />
                   </div>
                 </div>
               ) : (
