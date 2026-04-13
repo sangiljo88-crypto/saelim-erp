@@ -7,6 +7,7 @@ import {
   updateScheduleEvent,
   deleteScheduleEvent,
   requestVacation,
+  updateVacationRequest,
   approveVacation,
   type ScheduleCategory,
 } from "@/app/actions/schedule";
@@ -80,6 +81,7 @@ interface Props {
   canManage: boolean;
   myLeaveBalance: LeaveBalance | null;
   allLeaveBalances: LeaveBalance[];
+  myVacations: VacationRequest[];
 }
 
 // ──────────────────────────────────────────────
@@ -246,6 +248,7 @@ export default function ScheduleCalendar({
   canManage,
   myLeaveBalance,
   allLeaveBalances,
+  myVacations,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -271,6 +274,7 @@ export default function ScheduleCalendar({
   useEffect(() => { setEvents(initialEvents); }, [initialEvents]);
   useEffect(() => { setVacations(initialVacations); }, [initialVacations]);
   useEffect(() => { setPendingVacations(initialPending); }, [initialPending]);
+  useEffect(() => { setMyVacList(myVacations); }, [myVacations]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -295,6 +299,8 @@ export default function ScheduleCalendar({
 
   // 휴가 신청 모달
   const [showVacModal, setShowVacModal] = useState(false);
+  const [editVacationId, setEditVacationId] = useState<string | null>(null);
+  const [myVacList, setMyVacList] = useState<VacationRequest[]>(myVacations);
 
   // 연차 관리 (관리자) state
   const [balances, setBalances] = useState<LeaveBalance[]>(allLeaveBalances);
@@ -350,6 +356,16 @@ export default function ScheduleCalendar({
     setVacLeaveType("연차");
     setVacHours(1);
     setVacReason("");
+    setShowVacModal(true);
+  }
+
+  function openEditForm(v: VacationRequest) {
+    setVacStartDate(v.start_date);
+    setVacEndDate(v.end_date);
+    setVacLeaveType((v.leave_type as LeaveType) || "연차");
+    setVacHours(v.hours_count ?? 1);
+    setVacReason(v.reason ?? "");
+    setEditVacationId(v.id);
     setShowVacModal(true);
   }
 
@@ -494,20 +510,31 @@ export default function ScheduleCalendar({
     }
     startTransition(async () => {
       try {
-        await requestVacation({
-          start_date:   vacStartDate,
-          end_date:     effectiveEndDate || vacStartDate,
-          leave_type:   vacLeaveType,
-          hours_count:  vacLeaveType === "시간휴가" ? vacHours : null,
-          reason:       vacReason.trim() || null,
-        });
+        if (editVacationId) {
+          await updateVacationRequest(editVacationId, {
+            start_date: vacStartDate,
+            end_date: effectiveEndDate || vacStartDate,
+            leave_type: vacLeaveType,
+            hours_count: vacLeaveType === "시간휴가" ? vacHours : null,
+            reason: vacReason.trim() || null,
+          });
+        } else {
+          await requestVacation({
+            start_date:   vacStartDate,
+            end_date:     effectiveEndDate || vacStartDate,
+            leave_type:   vacLeaveType,
+            hours_count:  vacLeaveType === "시간휴가" ? vacHours : null,
+            reason:       vacReason.trim() || null,
+          });
+        }
         setVacStartDate("");
         setVacEndDate("");
         setVacReason("");
         setVacLeaveType("연차");
         setVacHours(1);
         setShowVacModal(false);
-        showSuccess("휴가 신청이 완료되었습니다. 결재 대기 중입니다.");
+        setEditVacationId(null);
+        showSuccess(editVacationId ? "휴가 신청이 수정되었습니다. 재승인 대기 중입니다." : "휴가 신청이 완료되었습니다. 결재 대기 중입니다.");
         router.refresh();
       } catch (e) {
         showError(e instanceof Error ? e.message : "오류가 발생했습니다.");
@@ -951,7 +978,7 @@ export default function ScheduleCalendar({
       {showVacModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          onClick={() => setShowVacModal(false)}
+          onClick={() => { setShowVacModal(false); setEditVacationId(null); }}
         >
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div
@@ -961,9 +988,13 @@ export default function ScheduleCalendar({
             {/* 모달 헤더 */}
             <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-gray-800 text-base">🏖️ 휴가 신청</h3>
+                <h3 className="font-bold text-gray-800 text-base">
+                  {editVacationId ? "✏️ 휴가 수정" : "🏖️ 휴가 신청"}
+                </h3>
                 {vacStartDate && (
-                  <p className="text-xs text-gray-400 mt-0.5">📅 {vacStartDate}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {editVacationId ? "수정 후 재승인이 필요합니다" : `📅 ${vacStartDate}`}
+                  </p>
                 )}
               </div>
               <div className="flex items-center gap-3">
@@ -979,7 +1010,7 @@ export default function ScheduleCalendar({
                   </span>
                 )}
                 <button
-                  onClick={() => setShowVacModal(false)}
+                  onClick={() => { setShowVacModal(false); setEditVacationId(null); }}
                   className="text-gray-400 hover:text-gray-600 text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
                 >
                   ×
@@ -1095,10 +1126,10 @@ export default function ScheduleCalendar({
                   disabled={isPending || (myRemaining !== null && previewDeducted > myRemaining && previewDeducted > 0)}
                   className="flex-1 bg-orange-500 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition-colors"
                 >
-                  {isPending ? "신청 중..." : "✅ 신청 완료"}
+                  {isPending ? "처리 중..." : editVacationId ? "✅ 수정 완료" : "✅ 신청 완료"}
                 </button>
                 <button
-                  onClick={() => setShowVacModal(false)}
+                  onClick={() => { setShowVacModal(false); setEditVacationId(null); }}
                   className="px-5 py-2.5 text-gray-600 rounded-xl text-sm hover:bg-gray-100 transition-colors"
                 >
                   취소
@@ -1189,6 +1220,58 @@ export default function ScheduleCalendar({
                 {Math.round((myRemaining! / Number(myLeaveBalance.total_days)) * 100)}%
               </span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── My Vacation Requests Section ── */}
+      {tab === "vacation" && myVacList.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <h3 className="font-bold text-gray-800 mb-4">내 신청 내역</h3>
+          <div className="flex flex-col gap-3">
+            {myVacList.slice(0, 10).map((v) => {
+              const canEdit = v.start_date > today && (v.status === "pending" || v.status === "approved");
+              const statusBadge = v.status === "approved"
+                ? "bg-emerald-100 text-emerald-700"
+                : v.status === "rejected"
+                ? "bg-red-100 text-red-600"
+                : "bg-yellow-100 text-yellow-700";
+              const statusLabel = v.status === "approved" ? "승인" : v.status === "rejected" ? "반려" : "대기";
+              const lt = v.leave_type;
+              const leaveLabel = !lt || lt === "연차" ? "연차"
+                : lt === "반차(오전)" ? "반차(오전)"
+                : lt === "반차(오후)" ? "반차(오후)"
+                : lt === "시간휴가" ? `시간휴가 ${v.hours_count ?? ""}시간`
+                : lt;
+              return (
+                <div key={v.id} className="flex items-center gap-3 border border-gray-100 rounded-xl px-4 py-3 hover:bg-gray-50 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusBadge}`}>
+                        {statusLabel}
+                      </span>
+                      <span className="text-xs font-semibold text-gray-700">{leaveLabel}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {v.start_date}{v.end_date !== v.start_date ? ` ~ ${v.end_date}` : ""}
+                      {v.deducted_days ? ` · ${v.deducted_days}일 차감` : ""}
+                    </div>
+                    {v.reason && <div className="text-xs text-gray-400 mt-0.5 truncate">사유: {v.reason}</div>}
+                    {v.status === "rejected" && v.reject_reason && (
+                      <div className="text-xs text-red-500 mt-0.5">반려: {v.reject_reason}</div>
+                    )}
+                  </div>
+                  {canEdit && (
+                    <button
+                      onClick={() => openEditForm(v)}
+                      className="text-xs text-[#1F3864] border border-[#1F3864]/30 px-3 py-1.5 rounded-lg hover:bg-[#1F3864] hover:text-white transition-colors font-semibold shrink-0"
+                    >
+                      수정
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

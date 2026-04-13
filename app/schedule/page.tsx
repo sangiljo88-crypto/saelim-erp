@@ -51,6 +51,7 @@ export default async function SchedulePage({
     pendingVacationsResult,
     myBalanceResult,
     allBalancesResult,
+    myVacationsResult,
   ] = await Promise.all([
     db.from("schedule_events")
       .select("*")
@@ -90,6 +91,13 @@ export default async function SchedulePage({
           .eq("year", thisYear)
           .order("dept", { ascending: true })
       : Promise.resolve({ data: [] }),
+
+    // 내 휴가 신청 내역 (최근 30건)
+    db.from("vacation_requests")
+      .select("*")
+      .eq("requester_id", session.id)
+      .order("created_at", { ascending: false })
+      .limit(30),
   ]);
 
   const events     = (eventsRaw ?? []) as ScheduleEvent[];
@@ -97,6 +105,7 @@ export default async function SchedulePage({
   const pendingVac = (pendingVacationsResult.data ?? []) as VacationRequest[];
   const myBalance  = (myBalanceResult.data ?? null) as LeaveBalance | null;
   const allBalances = (allBalancesResult.data ?? []) as LeaveBalance[];
+  const myVacations = (myVacationsResult.data ?? []) as VacationRequest[];
 
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
@@ -133,6 +142,7 @@ export default async function SchedulePage({
           canManage={canManage}
           myLeaveBalance={myBalance}
           allLeaveBalances={allBalances}
+          myVacations={myVacations}
         />
       </main>
     </div>

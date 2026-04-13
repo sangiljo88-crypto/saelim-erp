@@ -201,6 +201,122 @@ export async function requestVacation(data: RequestVacationData) {
   return { success: true };
 }
 
+export async function updateVacationRequest(id: string, data: RequestVacationData) {
+  const session = await getSession();
+  if (!session) throw new Error("로그인 필요");
+
+  const db = createServerClient();
+
+  // Fetch existing request - handle missing columns (deducted_days may not exist yet)
+  let existing: { requester_id: string; start_date: string; status: string; deducted_days?: number; days_count: number } | null = null;
+
+  const { data: existingFull, error: fetchErr } = await db
+    .from("vacation_requests")
+    .select("requester_id, start_date, status, deducted_days, days_count")
+    .eq("id", id)
+    .single();
+
+  if (fetchErr) {
+    if (fetchErr.code === '42703' || fetchErr.message.includes('column')) {
+      const { data: existingBasic, error: fetchErr2 } = await db
+        .from("vacation_requests")
+        .select("requester_id, start_date, status, days_count")
+        .eq("id", id)
+        .single();
+      if (fetchErr2 || !existingBasic) throw new Error("신청 건을 찾을 수 없습니다.");
+      existing = { ...existingBasic, deducted_days: existingBasic.days_count };
+    } else {
+      throw new Error("신청 건을 찾을 수 없습니다.");
+    }
+  } else {
+    existing = existingFull;
+  }
+
+  if (!existing) throw new Error("신청 건을 찾을 수 없습니다.");
+  if (existing.requester_id !== session.id) throw new Error("본인 신청만 수정 가능합니다.");
+
+  // Cannot edit if vacation already started
+  const today = new Date().toISOString().slice(0, 10);
+  if (existing.start_date <= today) throw new Error("이미 시작되었거나 지난 휴가는 수정할 수 없습니다.");
+
+  const { start_date, end_date, leave_type, hours_count, reason } = data;
+  const deducted = calcDeductedDays(leave_type, start_date, end_date, hours_count);
+  const isHalfOrHourUpdate = leave_type === '반차(오전)' || leave_type === '반차(오후)' || leave_type === '시간휴가';
+  const realEndDate = isHalfOrHourUpdate ? start_date : end_date;
+
+  // Check leave balance
+  const year = new Date(start_date).getFullYear();
+  const { data: bal } = await db
+    .from("employee_leave_balances")
+    .select("total_days, used_days")
+    .eq("employee_id", session.id)
+    .eq("year", year)
+    .single();
+
+  if (bal) {
+    const prevDeducted = Number(existing.deducted_days ?? existing.days_count ?? 1);
+    const totalDays = Number(bal.total_days);
+    const usedDays = Number(bal.used_days);
+    // If was approved, restore previous deduction before checking
+    const effectiveUsed = existing.status === 'approved' ? Math.max(0, usedDays - prevDeducted) : usedDays;
+    const remaining = totalDays - effectiveUsed;
+    if (deducted > remaining) {
+      throw new Error(`잔여 연차가 부족합니다. (신청: ${deducted}일, 잔여: ${remaining.toFixed(1)}일)`);
+    }
+  }
+
+  // If was approved, restore the leave balance first
+  if (existing.status === 'approved') {
+    const prevDeducted = Number(existing.deducted_days ?? existing.days_count ?? 1);
+    await restoreLeaveOnReject(
+      db, id,
+      session.id, session.name, session.dept ?? null,
+      new Date(existing.start_date as string).getFullYear(),
+      prevDeducted,
+      { id: session.id, name: `${session.name}(수정)` }
+    );
+  }
+
+  // Try update with all new columns
+  const { error } = await db.from("vacation_requests").update({
+    start_date,
+    end_date: realEndDate,
+    days_count: deducted,
+    leave_type,
+    hours_count: leave_type === '시간휴가' ? (hours_count ?? null) : null,
+    deducted_days: deducted,
+    reason: reason ?? null,
+    status: 'pending',
+    approved_by: null,
+    approved_by_name: null,
+    approved_at: null,
+    reject_reason: null,
+  }).eq("id", id);
+
+  if (error) {
+    // Fallback for old schema without new columns
+    if (error.code === '42703' || error.message.includes('column')) {
+      const { error: error2 } = await db.from("vacation_requests").update({
+        start_date,
+        end_date: realEndDate,
+        days_count: Math.ceil(deducted),
+        reason: reason ?? null,
+        status: 'pending',
+        approved_by: null,
+        approved_by_name: null,
+        approved_at: null,
+        reject_reason: null,
+      }).eq("id", id);
+      if (error2) throw new Error(error2.message);
+    } else {
+      throw new Error(error.message);
+    }
+  }
+
+  revalidatePath("/schedule");
+  return { success: true };
+}
+
 export async function approveVacation(
   id: string,
   status: "approved" | "rejected",
