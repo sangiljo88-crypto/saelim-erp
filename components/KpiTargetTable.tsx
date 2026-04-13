@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { upsertKpiTarget, initDefaultTargets } from "@/app/actions/kpi-targets";
 import type { KpiTarget } from "@/app/actions/kpi-targets";
 
@@ -16,14 +16,18 @@ export default function KpiTargetTable({
   targets: KpiTarget[];
   year: number;
 }) {
+  const [localTargets, setLocalTargets] = useState<KpiTarget[]>(targets);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // 서버에서 새 props가 오면 동기화
+  useEffect(() => { setLocalTargets(targets); }, [targets]);
+
   // 부서별 그룹핑
   const grouped = new Map<string, KpiTarget[]>();
-  for (const t of targets) {
+  for (const t of localTargets) {
     const arr = grouped.get(t.dept) ?? [];
     arr.push(t);
     grouped.set(t.dept, arr);
@@ -63,6 +67,14 @@ export default function KpiTargetTable({
         t.quarter
       );
       if (result.success) {
+        // 로컬 state 즉시 반영
+        setLocalTargets((prev) =>
+          prev.map((item) =>
+            item.dept === t.dept && item.kpi_key === t.kpi_key
+              ? { ...item, target_value: numVal }
+              : item
+          )
+        );
         setMessage({ type: "success", text: `${t.dept} ${t.label} 목표가 ${numVal}${t.unit}(으)로 변경되었습니다` });
         setEditingKey(null);
       } else {
@@ -97,7 +109,7 @@ export default function KpiTargetTable({
       {/* 상단 액션 */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-gray-500">
-          총 {targets.length}개 지표 · {sortedDepts.length}개 부서
+          총 {localTargets.length}개 지표 · {sortedDepts.length}개 부서
         </div>
         <button
           onClick={handleInit}

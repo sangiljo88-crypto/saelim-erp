@@ -146,20 +146,44 @@ export async function upsertKpiTarget(
     }
 
     const db = createServerClient();
-    const { error } = await db.from("kpi_targets").upsert(
-      {
-        dept,
-        kpi_key: kpiKey,
-        label,
-        target_value: targetValue,
-        unit,
-        year,
-        quarter: quarter ?? null,
-        updated_by: session.name,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "dept,kpi_key,year,quarter" }
-    );
+    const q = quarter ?? null;
+
+    // quarter가 null인 경우 UNIQUE 제약이 안 먹으므로 수동으로 기존 행 찾기
+    let existingQuery = db
+      .from("kpi_targets")
+      .select("id")
+      .eq("dept", dept)
+      .eq("kpi_key", kpiKey)
+      .eq("year", year);
+
+    if (q === null) {
+      existingQuery = existingQuery.is("quarter", null);
+    } else {
+      existingQuery = existingQuery.eq("quarter", q);
+    }
+
+    const { data: existing } = await existingQuery.maybeSingle();
+
+    const payload = {
+      dept,
+      kpi_key: kpiKey,
+      label,
+      target_value: targetValue,
+      unit,
+      year,
+      quarter: q,
+      updated_by: session.name,
+      updated_at: new Date().toISOString(),
+    };
+
+    let error;
+    if (existing?.id) {
+      // UPDATE
+      ({ error } = await db.from("kpi_targets").update(payload).eq("id", existing.id));
+    } else {
+      // INSERT
+      ({ error } = await db.from("kpi_targets").insert(payload));
+    }
 
     if (error) return { success: false, error: error.message };
 
@@ -184,27 +208,41 @@ export async function initDefaultTargets(
 
     const db = createServerClient();
     const now = new Date().toISOString();
-    const payload = DEFAULT_TARGETS.map((d) => ({
-      dept: d.dept,
-      kpi_key: d.kpi_key,
-      label: d.label,
-      target_value: d.target_value,
-      unit: d.unit,
-      year,
-      quarter: null,
-      updated_by: session.name,
-      updated_at: now,
-    }));
 
-    const { error } = await db
-      .from("kpi_targets")
-      .upsert(payload, { onConflict: "dept,kpi_key,year,quarter" });
+    let count = 0;
+    for (const d of DEFAULT_TARGETS) {
+      const { data: existing } = await db
+        .from("kpi_targets")
+        .select("id")
+        .eq("dept", d.dept)
+        .eq("kpi_key", d.kpi_key)
+        .eq("year", year)
+        .is("quarter", null)
+        .maybeSingle();
 
-    if (error) return { success: false, error: error.message };
+      const row = {
+        dept: d.dept,
+        kpi_key: d.kpi_key,
+        label: d.label,
+        target_value: d.target_value,
+        unit: d.unit,
+        year,
+        quarter: null,
+        updated_by: session.name,
+        updated_at: now,
+      };
+
+      if (existing?.id) {
+        await db.from("kpi_targets").update(row).eq("id", existing.id);
+      } else {
+        await db.from("kpi_targets").insert(row);
+      }
+      count++;
+    }
 
     revalidatePath("/settings/kpi");
     revalidatePath("/dashboard");
-    return { success: true, count: payload.length };
+    return { success: true, count };
   } catch (e) {
     return { success: false, error: (e as Error).message };
   }
