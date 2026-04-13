@@ -29,10 +29,15 @@ interface Props {
 
 type EditRow = Omit<Product, "id"> & { id?: string };
 
+type SortKey = "code" | "name" | "category" | "subcategory" | "unit" | "purchase_price" | "sale_price" | "storage_type" | "storage_area";
+type SortDir = "asc" | "desc";
+
 export default function ProductMasterSection({ initialProducts }: Props) {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [activeCategory, setActiveCategory] = useState<string>("전체");
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("code");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<EditRow | null>(null);
   const [saving, setSaving] = useState(false);
@@ -45,13 +50,35 @@ export default function ProductMasterSection({ initialProducts }: Props) {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- filtering ---
-  const filtered = products.filter((p) => {
-    const catOk = activeCategory === "전체" || p.category === activeCategory;
-    const q = search.trim().toLowerCase();
-    const searchOk = !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q);
-    return catOk && searchOk;
-  });
+  // --- 정렬 토글 ---
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  // --- filtering + sorting ---
+  const filtered = products
+    .filter((p) => {
+      const catOk = activeCategory === "전체" || p.category === activeCategory;
+      const q = search.trim().toLowerCase();
+      const searchOk = !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q);
+      return catOk && searchOk;
+    })
+    .sort((a, b) => {
+      const av = a[sortKey] ?? "";
+      const bv = b[sortKey] ?? "";
+      let cmp = 0;
+      if (typeof av === "number" && typeof bv === "number") {
+        cmp = av - bv;
+      } else {
+        cmp = String(av).localeCompare(String(bv), "ko");
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
 
   function showMsg(type: "success" | "error", text: string) {
     setMsg({ type, text });
@@ -259,15 +286,34 @@ export default function ProductMasterSection({ initialProducts }: Props) {
           <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="bg-[#1F3864] text-white text-xs">
-                <th className="text-left px-3 py-3 font-semibold w-24">품목코드</th>
-                <th className="text-left px-3 py-3 font-semibold w-36">품목명</th>
-                <th className="text-left px-3 py-3 font-semibold w-20">분류</th>
-                <th className="text-left px-3 py-3 font-semibold w-24">세부분류</th>
-                <th className="text-center px-3 py-3 font-semibold w-16">단위</th>
-                <th className="text-right px-3 py-3 font-semibold w-24">매입가(원)</th>
-                <th className="text-right px-3 py-3 font-semibold w-24">판매가(원)</th>
-                <th className="text-center px-3 py-3 font-semibold w-20">보관방법</th>
-                <th className="text-left px-3 py-3 font-semibold w-28">보관위치</th>
+                {(
+                  [
+                    { key: "code",           label: "품목코드",  align: "left",   w: "w-24" },
+                    { key: "name",           label: "품목명",    align: "left",   w: "w-36" },
+                    { key: "category",       label: "분류",      align: "left",   w: "w-20" },
+                    { key: "subcategory",    label: "세부분류",  align: "left",   w: "w-24" },
+                    { key: "unit",           label: "단위",      align: "center", w: "w-16" },
+                    { key: "purchase_price", label: "매입가(원)",align: "right",  w: "w-24" },
+                    { key: "sale_price",     label: "판매가(원)",align: "right",  w: "w-24" },
+                    { key: "storage_type",   label: "보관방법",  align: "center", w: "w-20" },
+                    { key: "storage_area",   label: "보관위치",  align: "left",   w: "w-28" },
+                  ] as { key: SortKey; label: string; align: string; w: string }[]
+                ).map(({ key, label, align, w }) => {
+                  const active = sortKey === key;
+                  const icon = active ? (sortDir === "asc" ? " ▲" : " ▼") : " ⇅";
+                  return (
+                    <th
+                      key={key}
+                      className={`px-3 py-3 font-semibold ${w} text-${align} cursor-pointer select-none hover:bg-[#162c52] transition-colors`}
+                      onClick={() => toggleSort(key)}
+                    >
+                      <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+                        {label}
+                        <span className={`text-[10px] ${active ? "text-yellow-300" : "text-white/40"}`}>{icon}</span>
+                      </span>
+                    </th>
+                  );
+                })}
                 <th className="text-center px-3 py-3 font-semibold w-16">상태</th>
                 <th className="px-3 py-3 w-24"></th>
               </tr>
