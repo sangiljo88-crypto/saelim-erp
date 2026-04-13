@@ -293,6 +293,9 @@ export default function ScheduleCalendar({
   const [vacHours, setVacHours] = useState<number>(1);
   const [rejectReasonMap, setRejectReasonMap] = useState<Record<string, string>>({});
 
+  // 휴가 신청 모달
+  const [showVacModal, setShowVacModal] = useState(false);
+
   // 연차 관리 (관리자) state
   const [balances, setBalances] = useState<LeaveBalance[]>(allLeaveBalances);
   const [adjustTarget, setAdjustTarget] = useState<LeaveBalance | null>(null);
@@ -338,6 +341,16 @@ export default function ScheduleCalendar({
   // Get vacations for a specific date (approved, calendar display)
   function vacationsForDate(dateStr: string): VacationRequest[] {
     return vacations.filter((v) => vacationCoversDate(v, dateStr));
+  }
+
+  // Open vacation modal for a specific day
+  function openVacFormForDay(dateStr: string) {
+    setVacStartDate(dateStr);
+    setVacEndDate(dateStr);
+    setVacLeaveType("연차");
+    setVacHours(1);
+    setVacReason("");
+    setShowVacModal(true);
   }
 
   // Open add form for a specific day
@@ -493,6 +506,7 @@ export default function ScheduleCalendar({
         setVacReason("");
         setVacLeaveType("연차");
         setVacHours(1);
+        setShowVacModal(false);
         showSuccess("휴가 신청이 완료되었습니다. 결재 대기 중입니다.");
         router.refresh();
       } catch (e) {
@@ -682,6 +696,8 @@ export default function ScheduleCalendar({
                   onClick={() => {
                     if (tab === "schedule" && isThisMonth) {
                       openAddFormForDay(dateStr);
+                    } else if (tab === "vacation" && isThisMonth) {
+                      openVacFormForDay(dateStr);
                     } else {
                       setSelectedDay(isSelected ? null : dateStr);
                     }
@@ -717,6 +733,18 @@ export default function ScheduleCalendar({
                         }}
                         className="text-gray-300 hover:text-[#1F3864] text-lg leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-blue-100 transition-colors"
                         title="일정 추가"
+                      >
+                        +
+                      </button>
+                    )}
+                    {tab === "vacation" && isThisMonth && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openVacFormForDay(dateStr);
+                        }}
+                        className="text-gray-300 hover:text-orange-400 text-lg leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-orange-50 transition-colors"
+                        title="휴가 신청"
                       >
                         +
                       </button>
@@ -778,6 +806,29 @@ export default function ScheduleCalendar({
             >
               + 일정 추가
             </button>
+          </div>
+        )}
+        {/* Global vacation button + balance badge */}
+        {tab === "vacation" && (
+          <div className="px-4 sm:px-6 pb-4 flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => openVacFormForDay(today)}
+              className="text-sm bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors font-semibold"
+            >
+              🏖️ 휴가 신청
+            </button>
+            {myRemaining !== null && (
+              <span className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${
+                myRemaining > 5
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : myRemaining > 0
+                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                  : "bg-red-50 text-red-700 border-red-200"
+              }`}>
+                잔여 연차 <strong>{myRemaining.toFixed(1)}일</strong>
+                {myLeaveBalance && <span className="text-gray-400 font-normal ml-1">/ {Number(myLeaveBalance.total_days).toFixed(0)}일</span>}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -886,6 +937,168 @@ export default function ScheduleCalendar({
         </div>
       )}
 
+      {/* ── Vacation Request Modal ── */}
+      {showVacModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowVacModal(false)}
+        >
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 모달 헤더 */}
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-gray-800 text-base">🏖️ 휴가 신청</h3>
+                {vacStartDate && (
+                  <p className="text-xs text-gray-400 mt-0.5">📅 {vacStartDate}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                {myRemaining !== null && (
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                    myRemaining > 5
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : myRemaining > 0
+                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                      : "bg-red-50 text-red-700 border-red-200"
+                  }`}>
+                    잔여 {myRemaining.toFixed(1)}일
+                  </span>
+                )}
+                <button
+                  onClick={() => setShowVacModal(false)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            {/* 모달 본문 */}
+            <div className="px-6 py-5 flex flex-col gap-4">
+              {/* 휴가 종류 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-2">휴가 종류 *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["연차", "반차(오전)", "반차(오후)", "시간휴가"] as LeaveType[]).map((lt) => (
+                    <button
+                      key={lt}
+                      type="button"
+                      onClick={() => { setVacLeaveType(lt); setVacHours(1); }}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-colors text-left flex items-center gap-1.5 ${
+                        vacLeaveType === lt
+                          ? "bg-[#1F3864] text-white border-[#1F3864]"
+                          : "bg-white text-gray-600 border-gray-200 hover:border-[#1F3864] hover:text-[#1F3864]"
+                      }`}
+                    >
+                      <span>{lt === "연차" ? "📅" : lt === "반차(오전)" ? "🌅" : lt === "반차(오후)" ? "🌇" : "⏱️"}</span>
+                      <span>{lt}</span>
+                      <span className={`ml-auto text-[10px] ${vacLeaveType === lt ? "text-white/70" : "text-gray-400"}`}>
+                        {lt === "연차" ? "1일" : lt === "반차(오전)" ? "0.5일" : lt === "반차(오후)" ? "0.5일" : "시간/8"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 날짜 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">시작일 *</label>
+                  <DatePickerInput value={vacStartDate} onChange={(v) => { setVacStartDate(v); if (isHalfOrHour) setVacEndDate(v); }} required />
+                </div>
+                {!isHalfOrHour && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">종료일 *</label>
+                    <DatePickerInput value={vacEndDate} onChange={setVacEndDate} required min={vacStartDate} />
+                  </div>
+                )}
+                {vacLeaveType === "시간휴가" && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">사용 시간 *</label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setVacHours((h) => Math.max(1, h - 1))}
+                        className="w-9 h-9 border border-gray-300 rounded-lg text-lg font-bold text-gray-600 hover:bg-gray-100 flex items-center justify-center"
+                      >−</button>
+                      <input
+                        type="number" min={1} max={8}
+                        value={vacHours}
+                        onChange={(e) => setVacHours(Math.min(8, Math.max(1, Number(e.target.value))))}
+                        className="w-14 border border-gray-300 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-[#1F3864]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setVacHours((h) => Math.min(8, h + 1))}
+                        className="w-9 h-9 border border-gray-300 rounded-lg text-lg font-bold text-gray-600 hover:bg-gray-100 flex items-center justify-center"
+                      >+</button>
+                      <span className="text-sm text-gray-500">시간</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 사유 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">사유 (선택)</label>
+                <textarea
+                  value={vacReason}
+                  onChange={(e) => setVacReason(e.target.value)}
+                  placeholder="휴가 사유를 입력하세요"
+                  rows={2}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864] resize-none"
+                />
+              </div>
+
+              {/* 차감 미리보기 */}
+              {vacStartDate && previewDeducted > 0 && (
+                <div className={`px-4 py-3 rounded-xl flex items-center justify-between ${
+                  myRemaining !== null && previewDeducted > myRemaining
+                    ? "bg-red-50 border border-red-200"
+                    : "bg-blue-50 border border-blue-200"
+                }`}>
+                  <div className="text-sm">
+                    <span className="text-gray-600">차감 예정: </span>
+                    <strong className={myRemaining !== null && previewDeducted > myRemaining ? "text-red-600" : "text-[#1F3864]"}>
+                      {previewDeducted}일
+                    </strong>
+                    {myRemaining !== null && (
+                      <span className="text-gray-400 text-xs ml-2">
+                        → 신청 후 잔여: {(myRemaining - previewDeducted).toFixed(1)}일
+                      </span>
+                    )}
+                  </div>
+                  {myRemaining !== null && previewDeducted > myRemaining && (
+                    <span className="text-xs font-semibold text-red-600">잔여 부족</span>
+                  )}
+                </div>
+              )}
+
+              {/* 버튼 */}
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  onClick={handleRequestVacation}
+                  disabled={isPending || (myRemaining !== null && previewDeducted > myRemaining && previewDeducted > 0)}
+                  className="flex-1 bg-orange-500 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                >
+                  {isPending ? "신청 중..." : "✅ 신청 완료"}
+                </button>
+                <button
+                  onClick={() => setShowVacModal(false)}
+                  className="px-5 py-2.5 text-gray-600 rounded-xl text-sm hover:bg-gray-100 transition-colors"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Selected Day Detail Panel (schedule tab) ── */}
       {tab === "schedule" && selectedDay && (
         <SelectedDayPanel
@@ -936,131 +1149,36 @@ export default function ScheduleCalendar({
         </div>
       )}
 
-      {/* ── Vacation Request Form ── */}
-      {tab === "vacation" && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-gray-800">휴가 신청</h3>
-            {myRemaining !== null && (
-              <div className={`text-xs font-semibold px-3 py-1.5 rounded-full ${
-                myRemaining > 5
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                  : myRemaining > 0
-                  ? "bg-amber-50 text-amber-700 border border-amber-200"
-                  : "bg-red-50 text-red-700 border border-red-200"
-              }`}>
-                잔여 연차 <strong>{myRemaining.toFixed(1)}일</strong>
-                {myLeaveBalance && (
-                  <span className="text-gray-400 font-normal ml-1">
-                    / {Number(myLeaveBalance.total_days).toFixed(0)}일
-                  </span>
-                )}
+      {/* ── My Leave Balance Card ── */}
+      {tab === "vacation" && myLeaveBalance && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 px-5 py-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-bold text-gray-700">내 연차 현황 ({myLeaveBalance.year}년)</span>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-gray-500">총 <strong className="text-gray-700">{Number(myLeaveBalance.total_days).toFixed(0)}일</strong></span>
+                <span className="text-gray-300">|</span>
+                <span className="text-gray-500">사용 <strong className="text-orange-600">{Number(myLeaveBalance.used_days).toFixed(1)}일</strong></span>
+                <span className="text-gray-300">|</span>
+                <span className="text-gray-500">잔여 <strong className={
+                  myRemaining! > 5 ? "text-emerald-600" : myRemaining! > 0 ? "text-amber-600" : "text-red-600"
+                }>{myRemaining!.toFixed(1)}일</strong></span>
               </div>
-            )}
-          </div>
-
-          {/* 휴가 종류 선택 */}
-          <div className="mb-4">
-            <label className="block text-xs font-semibold text-gray-600 mb-2">휴가 종류 *</label>
-            <div className="flex flex-wrap gap-2">
-              {(["연차", "반차(오전)", "반차(오후)", "시간휴가"] as LeaveType[]).map((lt) => (
-                <button
-                  key={lt}
-                  type="button"
-                  onClick={() => { setVacLeaveType(lt); setVacHours(1); }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                    vacLeaveType === lt
-                      ? "bg-[#1F3864] text-white border-[#1F3864]"
-                      : "bg-white text-gray-600 border-gray-300 hover:border-[#1F3864] hover:text-[#1F3864]"
+            </div>
+            {/* 잔여 프로그레스 */}
+            <div className="flex items-center gap-2 min-w-[140px]">
+              <div className="flex-1 bg-gray-200 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    myRemaining! > 5 ? "bg-emerald-400" : myRemaining! > 0 ? "bg-amber-400" : "bg-red-400"
                   }`}
-                >
-                  {lt === "연차" && "📅 연차"}
-                  {lt === "반차(오전)" && "🌅 반차(오전)"}
-                  {lt === "반차(오후)" && "🌇 반차(오후)"}
-                  {lt === "시간휴가" && "⏱️ 시간휴가"}
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-gray-400 mt-1.5">
-              {vacLeaveType === "연차" && "하루 1일 차감"}
-              {vacLeaveType === "반차(오전)" && "0.5일 차감 · 오전 반차"}
-              {vacLeaveType === "반차(오후)" && "0.5일 차감 · 오후 반차"}
-              {vacLeaveType === "시간휴가" && "시간 ÷ 8 차감 (예: 2시간 = 0.25일)"}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">시작일 *</label>
-              <DatePickerInput value={vacStartDate} onChange={setVacStartDate} required />
-            </div>
-            {!isHalfOrHour && (
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">종료일 *</label>
-                <DatePickerInput value={vacEndDate} onChange={(v) => setVacEndDate(v)} required min={vacStartDate} />
+                  style={{ width: `${Math.min(100, Math.max(0, (myRemaining! / Number(myLeaveBalance.total_days)) * 100))}%` }}
+                />
               </div>
-            )}
-            {vacLeaveType === "시간휴가" && (
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">사용 시간 *</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={1}
-                    max={8}
-                    value={vacHours}
-                    onChange={(e) => setVacHours(Math.min(8, Math.max(1, Number(e.target.value))))}
-                    className="w-20 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864] text-center"
-                  />
-                  <span className="text-sm text-gray-500">시간</span>
-                  <span className="text-xs text-gray-400">(최대 8시간)</span>
-                </div>
-              </div>
-            )}
-            <div className={isHalfOrHour && vacLeaveType !== "시간휴가" ? "" : "sm:col-span-2"}>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">사유 (선택)</label>
-              <textarea
-                value={vacReason}
-                onChange={(e) => setVacReason(e.target.value)}
-                placeholder="휴가 사유를 입력하세요"
-                rows={2}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1F3864] resize-none"
-              />
+              <span className="text-xs text-gray-400 w-8 text-right">
+                {Math.round((myRemaining! / Number(myLeaveBalance.total_days)) * 100)}%
+              </span>
             </div>
-          </div>
-
-          {/* 차감 미리보기 */}
-          {vacStartDate && previewDeducted > 0 && (
-            <div className={`mt-3 px-4 py-3 rounded-xl flex items-center justify-between ${
-              myRemaining !== null && previewDeducted > myRemaining
-                ? "bg-red-50 border border-red-200"
-                : "bg-blue-50 border border-blue-200"
-            }`}>
-              <div className="text-sm">
-                <span className="text-gray-600">차감 예정: </span>
-                <strong className={myRemaining !== null && previewDeducted > myRemaining ? "text-red-600" : "text-[#1F3864]"}>
-                  {previewDeducted}일
-                </strong>
-                {myRemaining !== null && (
-                  <span className="text-gray-400 text-xs ml-2">
-                    → 신청 후 잔여: {(myRemaining - previewDeducted).toFixed(1)}일
-                  </span>
-                )}
-              </div>
-              {myRemaining !== null && previewDeducted > myRemaining && (
-                <span className="text-xs font-semibold text-red-600">잔여 부족</span>
-              )}
-            </div>
-          )}
-
-          <div className="mt-4">
-            <button
-              onClick={handleRequestVacation}
-              disabled={isPending || (myRemaining !== null && previewDeducted > myRemaining && previewDeducted > 0)}
-              className="bg-[#1F3864] text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-[#2a4a7f] disabled:opacity-50 transition-colors"
-            >
-              {isPending ? "신청 중..." : "휴가 신청"}
-            </button>
           </div>
         </div>
       )}

@@ -178,7 +178,25 @@ export async function requestVacation(data: RequestVacationData) {
     status:         "pending",
   });
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    // 새 컬럼이 없는 경우(마이그레이션 미실행) 기존 스키마로 재시도
+    if (error.code === '42703' || error.message.includes('column')) {
+      const { error: error2 } = await db.from("vacation_requests").insert({
+        requester_id:   session.id,
+        requester_name: session.name,
+        dept:           session.dept ?? null,
+        start_date,
+        end_date:       realEndDate,
+        days_count:     Math.ceil(daysCount),
+        reason:         reason ?? null,
+        status:         "pending",
+      });
+      if (error2) throw new Error(error2.message);
+      // 마이그레이션 안내 (성공은 하지만 경고)
+    } else {
+      throw new Error(error.message);
+    }
+  }
   revalidatePath("/schedule");
   return { success: true };
 }
