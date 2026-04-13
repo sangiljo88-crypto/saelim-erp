@@ -3,6 +3,13 @@ import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import WorkerForms from "@/components/WorkerForms";
 import { createServerClient } from "@/lib/supabase";
+import type { Viewport } from "next";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
 
 export default async function WorkerPage() {
   const session = await getSession();
@@ -34,7 +41,7 @@ export default async function WorkerPage() {
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
       <AppHeader session={session} subtitle="작업자 입력" />
-      <main className="max-w-lg mx-auto px-4 py-5 flex flex-col gap-4">
+      <main className="max-w-lg mx-auto px-3 sm:px-4 py-3 sm:py-5 flex flex-col gap-3 sm:gap-4">
 
         <div className="flex items-center justify-between">
           <div>

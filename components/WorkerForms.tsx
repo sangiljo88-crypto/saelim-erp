@@ -91,18 +91,18 @@ export default function WorkerForms({ dept, todayProduction = false, todayHygien
   return (
     <div className="flex flex-col gap-4">
       {/* 부서 안내 */}
-      <div className="text-xs text-gray-400 text-center">
+      <div className="text-sm sm:text-xs text-gray-400 text-center">
         <span className="font-medium text-gray-600">{dept}</span> 입력 가능 항목
       </div>
 
-      {/* 탭 — 부서별 필터 */}
+      {/* 탭 — 부서별 필터 (모바일 터치 최적화) */}
       <div
         className="bg-white rounded-xl p-1.5 border border-gray-200"
         style={{ display: "grid", gridTemplateColumns: `repeat(${tabs.length}, 1fr)`, gap: "6px" }}
       >
         {tabs.map((f) => (
           <button key={f} onClick={() => { setActiveForm(f); setError(null); }}
-            className={`py-2.5 rounded-lg text-xs font-semibold transition-colors relative ${
+            className={`py-3 sm:py-2.5 rounded-lg text-sm sm:text-xs font-semibold transition-colors relative min-h-[48px] sm:min-h-0 ${
               activeForm === f ? "bg-[#1F3864] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
             }`}>
             {TAB_LABELS[f]}
@@ -116,7 +116,7 @@ export default function WorkerForms({ dept, todayProduction = false, todayHygien
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-base sm:text-sm text-red-700">
           ⚠️ {error}
         </div>
       )}
@@ -149,6 +149,56 @@ export default function WorkerForms({ dept, todayProduction = false, todayHygien
   );
 }
 
+/* ─── +/- 스테퍼 숫자 입력 컴포넌트 ─── */
+function StepperInput({
+  name,
+  value,
+  onChange,
+  placeholder,
+  step = 1,
+}: {
+  name: string;
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  step?: number;
+}) {
+  const adjust = (delta: number) => {
+    const current = parseFloat(value) || 0;
+    const next = Math.max(0, current + delta);
+    onChange(String(next));
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => adjust(-step)}
+        className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg border border-gray-300 bg-gray-50 text-gray-600 text-lg font-bold active:bg-gray-200 transition-colors shrink-0"
+        aria-label="감소"
+      >
+        −
+      </button>
+      <input
+        type="number"
+        name={name}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 min-w-0 rounded-xl border border-gray-300 px-3 py-3 sm:py-2 text-base sm:text-sm text-center focus:border-[#1F3864] outline-none min-h-[48px] sm:min-h-0"
+      />
+      <button
+        type="button"
+        onClick={() => adjust(step)}
+        className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg border border-gray-300 bg-gray-50 text-gray-600 text-lg font-bold active:bg-gray-200 transition-colors shrink-0"
+        aria-label="증가"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
 /* ─── 생산일지 ─── */
 function ProductionForm({
   onSuccess, onError, todaySubmitted = false,
@@ -163,6 +213,8 @@ function ProductionForm({
   const [customName, setCustomName] = useState("");
   const [inputQty, setInputQty] = useState("");
   const [outputQty, setOutputQty] = useState("");
+  const [wasteQty, setWasteQty] = useState("");
+  const [packQty, setPackQty] = useState("");
   const [loading, setLoading] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -201,13 +253,13 @@ function ProductionForm({
   }
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-col gap-5">
-      <h2 className="font-bold text-gray-800">생산일지 입력</h2>
+    <form ref={formRef} onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-4 flex flex-col gap-5">
+      <h2 className="font-bold text-gray-800 text-base sm:text-sm">생산일지 입력</h2>
 
       {/* 오늘 이미 제출 배너 */}
       {todaySubmitted && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700 flex items-center gap-2">
-          <span className="text-base">✅</span>
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-base sm:text-sm text-emerald-700 flex items-center gap-2 w-full">
+          <span className="text-xl">✅</span>
           <span>오늘 생산일지를 이미 제출했습니다. <span className="font-normal text-emerald-600">(추가 입력도 가능합니다)</span></span>
         </div>
       )}
@@ -217,10 +269,10 @@ function ProductionForm({
       {/* 제품 선택 */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <label className="text-sm font-medium text-gray-700">제품 선택 <span className="text-red-500">*</span></label>
+          <label className="text-sm sm:text-xs font-medium text-gray-700">제품 선택 <span className="text-red-500">*</span></label>
           <button type="button"
             onClick={() => { setCustomMode(!customMode); setSelectedProduct(null); setCustomName(""); }}
-            className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+            className={`text-sm sm:text-xs px-3 py-1.5 sm:py-1 rounded-full border transition-colors min-h-[40px] sm:min-h-0 ${
               customMode ? "bg-[#1F3864] text-white border-[#1F3864]" : "text-gray-500 border-gray-300"
             }`}>
             {customMode ? "✕ 직접입력 취소" : "✏️ 직접 입력"}
@@ -230,13 +282,13 @@ function ProductionForm({
         {customMode ? (
           <input type="text" value={customName} onChange={(e) => setCustomName(e.target.value)}
             placeholder="제품명을 직접 입력하세요" autoFocus
-            className="rounded-xl border border-[#1F3864] px-4 py-3 text-sm outline-none ring-2 ring-[#1F3864]/20" />
+            className="rounded-xl border border-[#1F3864] px-4 py-3 sm:py-2 text-base sm:text-sm outline-none ring-2 ring-[#1F3864]/20 min-h-[48px] sm:min-h-0" />
         ) : (
           <div className="flex flex-col gap-2">
             <div className="flex gap-1.5 flex-wrap">
               {CATEGORIES.map((cat) => (
                 <button key={cat} type="button" onClick={() => setCategory(cat)}
-                  className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                  className={`text-sm sm:text-xs px-3 py-2 sm:py-1.5 rounded-full font-medium transition-colors min-h-[40px] sm:min-h-0 ${
                     category === cat ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600"
                   }`}>{cat}</button>
               ))}
@@ -244,7 +296,7 @@ function ProductionForm({
             <div className="grid grid-cols-2 gap-2">
               {filtered.map((product) => (
                 <button key={product.id} type="button" onClick={() => setSelectedProduct(product.id)}
-                  className={`flex flex-col items-start gap-0.5 px-4 py-3 rounded-xl border-2 text-left transition-all active:scale-95 ${
+                  className={`flex flex-col items-start gap-0.5 px-4 py-3 rounded-xl border-2 text-left transition-all active:scale-95 min-h-[48px] ${
                     selectedProduct === product.id
                       ? "border-[#1F3864] bg-[#1F3864]/5"
                       : "border-gray-200 bg-gray-50 hover:border-gray-300"
@@ -270,51 +322,76 @@ function ProductionForm({
         )}
       </div>
 
-      {/* 수량 — 투입/산출은 controlled (수율 계산용) */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* 수량 — 투입/산출은 controlled (수율 계산용), 스테퍼 버튼 포함 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-3">
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-gray-700">원료 투입량 ({unit})</label>
-          <input
-            type="number" name="input_qty" value={inputQty} placeholder="예: 1500"
-            onChange={(e) => setInputQty(e.target.value)}
-            className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#1F3864] outline-none"
+          <label className="text-sm sm:text-xs font-medium text-gray-700">원료 투입량 ({unit})</label>
+          <StepperInput
+            name="input_qty"
+            value={inputQty}
+            onChange={setInputQty}
+            placeholder="예: 1500"
+            step={10}
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-gray-700">완성품 생산량 ({unit})</label>
-          <input
-            type="number" name="output_qty" value={outputQty} placeholder="예: 1380"
-            onChange={(e) => setOutputQty(e.target.value)}
-            className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#1F3864] outline-none"
+          <label className="text-sm sm:text-xs font-medium text-gray-700">완성품 생산량 ({unit})</label>
+          <StepperInput
+            name="output_qty"
+            value={outputQty}
+            onChange={setOutputQty}
+            placeholder="예: 1380"
+            step={10}
           />
         </div>
       </div>
 
-      {/* 실시간 수율 표시 */}
+      {/* 실시간 수율 표시 — 모바일에서 크게 */}
       {yieldStyle && yieldRate !== null && (
-        <div className={`flex items-center justify-between border rounded-xl px-4 py-3 ${yieldStyle.bg}`}>
-          <span className={`text-sm font-bold ${yieldStyle.text}`}>
+        <div className={`flex flex-col sm:flex-row items-center justify-between border rounded-xl px-4 py-4 sm:py-3 gap-1 ${yieldStyle.bg}`}>
+          <span className={`text-2xl sm:text-sm font-bold ${yieldStyle.text}`}>
             현재 수율: {yieldRate}%
           </span>
-          <span className={`text-xs font-semibold ${yieldStyle.text}`}>{yieldStyle.msg}</span>
+          <span className={`text-sm sm:text-xs font-semibold ${yieldStyle.text}`}>{yieldStyle.msg}</span>
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <Field label={`폐기량 (${unit})`}    type="number" name="waste_qty" placeholder="예: 30" />
-        <Field label="포장재 사용량 (개)"     type="number" name="pack_qty"  placeholder="예: 200" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-3">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm sm:text-xs font-medium text-gray-700">폐기량 ({unit})</label>
+          <StepperInput
+            name="waste_qty"
+            value={wasteQty}
+            onChange={setWasteQty}
+            placeholder="예: 30"
+            step={1}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm sm:text-xs font-medium text-gray-700">포장재 사용량 (개)</label>
+          <StepperInput
+            name="pack_qty"
+            value={packQty}
+            onChange={setPackQty}
+            placeholder="예: 200"
+            step={10}
+          />
+        </div>
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-gray-700">이슈 사항 (없으면 비워두세요)</label>
+        <label className="text-sm sm:text-xs font-medium text-gray-700">이슈 사항 (없으면 비워두세요)</label>
         <textarea name="issue_note" rows={3} placeholder="설비 이상, 원료 부족, 기타 특이사항..."
-          className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#1F3864] outline-none resize-none" />
+          className="rounded-xl border border-gray-300 px-4 py-3 sm:py-2 text-base sm:text-sm focus:border-[#1F3864] outline-none resize-none min-h-[48px]" />
       </div>
 
-      <button type="submit" disabled={!canSubmit || loading}
-        className="w-full py-3.5 bg-[#1F3864] text-white font-semibold rounded-xl text-sm hover:bg-[#162c52] active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-        {loading ? "저장 중..." : canSubmit ? "생산일지 제출" : "제품을 먼저 선택해주세요"}
-      </button>
+      {/* 제출 버튼 — 모바일에서 하단 고정 */}
+      <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 -mx-5 -mb-5 sm:relative sm:border-t-0 sm:p-0 sm:mx-0 sm:mb-0">
+        <button type="submit" disabled={!canSubmit || loading}
+          className="w-full h-14 sm:h-auto sm:py-3.5 bg-[#1F3864] text-white font-bold sm:font-semibold rounded-xl text-base sm:text-sm hover:bg-[#162c52] active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+          {loading ? "⏳ 저장 중..." : canSubmit ? "생산일지 제출" : "제품을 먼저 선택해주세요"}
+        </button>
+      </div>
     </form>
   );
 }
@@ -348,38 +425,41 @@ function HygieneForm({
   const passedCount = Object.values(checked).filter(Boolean).length;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-col gap-4">
+    <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-4 flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-bold text-gray-800">위생 점검 체크리스트</h2>
-        <span className="text-xs font-semibold text-gray-500">{passedCount}/{HYGIENE_ITEMS.length}</span>
+        <h2 className="font-bold text-gray-800 text-base sm:text-sm">위생 점검 체크리스트</h2>
+        <span className="text-sm sm:text-xs font-semibold text-gray-500">{passedCount}/{HYGIENE_ITEMS.length}</span>
       </div>
 
       {/* 오늘 이미 제출 배너 */}
       {todaySubmitted && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700 flex items-center gap-2">
-          <span className="text-base">✅</span>
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-base sm:text-sm text-emerald-700 flex items-center gap-2 w-full">
+          <span className="text-xl">✅</span>
           <span>오늘 위생점검을 이미 제출했습니다. <span className="font-normal text-emerald-600">(추가 입력도 가능합니다)</span></span>
         </div>
       )}
 
       {HYGIENE_ITEMS.map((item) => (
         <button key={item} type="button" onClick={() => setChecked((p) => ({ ...p, [item]: !p[item] }))}
-          className={`flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all ${
+          className={`flex items-center gap-3 p-4 sm:p-3.5 rounded-xl border text-left transition-all min-h-[48px] ${
             checked[item] ? "bg-emerald-50 border-emerald-300" : "bg-gray-50 border-gray-200"
           }`}>
-          <span className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+          <span className={`w-7 h-7 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
             checked[item] ? "bg-emerald-500 border-emerald-500" : "border-gray-300"
           }`}>
             {checked[item] && <span className="text-white text-xs font-bold">✓</span>}
           </span>
-          <span className={`text-sm ${checked[item] ? "text-emerald-700 font-medium" : "text-gray-700"}`}>{item}</span>
+          <span className={`text-base sm:text-sm ${checked[item] ? "text-emerald-700 font-medium" : "text-gray-700"}`}>{item}</span>
         </button>
       ))}
 
-      <button onClick={handleSubmit} disabled={loading}
-        className="w-full py-3.5 bg-[#1F3864] text-white font-semibold rounded-xl text-sm hover:bg-[#162c52] active:scale-95 disabled:opacity-60 transition-all">
-        {loading ? "저장 중..." : `점검 완료 제출 (${passedCount}/${HYGIENE_ITEMS.length} 통과)`}
-      </button>
+      {/* 제출 버튼 — 모바일에서 하단 고정 */}
+      <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 -mx-5 -mb-5 sm:relative sm:border-t-0 sm:p-0 sm:mx-0 sm:mb-0">
+        <button onClick={handleSubmit} disabled={loading}
+          className="w-full h-14 sm:h-auto sm:py-3.5 bg-[#1F3864] text-white font-bold sm:font-semibold rounded-xl text-base sm:text-sm hover:bg-[#162c52] active:scale-95 disabled:opacity-60 transition-all">
+          {loading ? "⏳ 저장 중..." : `점검 완료 제출 (${passedCount}/${HYGIENE_ITEMS.length} 통과)`}
+        </button>
+      </div>
     </div>
   );
 }
@@ -409,23 +489,23 @@ function ClaimForm({ onSuccess, onError }: { onSuccess: () => void; onError: (m:
   }
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-col gap-4">
-      <h2 className="font-bold text-gray-800">클레임 접수</h2>
+    <form ref={formRef} onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-4 flex flex-col gap-5 sm:gap-4">
+      <h2 className="font-bold text-gray-800 text-base sm:text-sm">클레임 접수</h2>
 
       <Field label="접수 날짜" type="date" name="claim_date" defaultValue={new Date().toISOString().split("T")[0]} />
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-gray-700">거래처명 <span className="text-red-500">*</span></label>
+        <label className="text-sm sm:text-xs font-medium text-gray-700">거래처명 <span className="text-red-500">*</span></label>
         <input name="client_name" type="text" required placeholder="예: BHC 본사"
-          className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#1F3864] outline-none" />
+          className="rounded-xl border border-gray-300 px-4 py-3 sm:py-2 text-base sm:text-sm focus:border-[#1F3864] outline-none min-h-[48px] sm:min-h-0" />
       </div>
 
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-gray-700">관련 제품 (복수 선택 가능)</label>
+        <label className="text-sm sm:text-xs font-medium text-gray-700">관련 제품 (복수 선택 가능)</label>
         <div className="grid grid-cols-2 gap-2">
           {PRODUCT_CATALOG.slice(0, 8).map((p) => (
             <button key={p.id} type="button" onClick={() => toggleProduct(p.name)}
-              className={`text-xs px-3 py-2.5 rounded-xl border font-medium transition-all ${
+              className={`text-sm sm:text-xs px-3 py-3 sm:py-2.5 rounded-xl border font-medium transition-all min-h-[48px] sm:min-h-0 ${
                 selectedProducts.includes(p.name)
                   ? "bg-red-50 border-red-400 text-red-700"
                   : "bg-gray-50 border-gray-200 text-gray-600"
@@ -437,8 +517,8 @@ function ClaimForm({ onSuccess, onError }: { onSuccess: () => void; onError: (m:
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-gray-700">클레임 유형</label>
-        <select name="claim_type" className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#1F3864] outline-none bg-white">
+        <label className="text-sm sm:text-xs font-medium text-gray-700">클레임 유형</label>
+        <select name="claim_type" className="rounded-xl border border-gray-300 px-4 py-3 sm:py-2 text-base sm:text-sm focus:border-[#1F3864] outline-none bg-white min-h-[48px] sm:min-h-0">
           <option>품질 이상</option>
           <option>배송 지연</option>
           <option>수량 부족</option>
@@ -448,15 +528,18 @@ function ClaimForm({ onSuccess, onError }: { onSuccess: () => void; onError: (m:
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-gray-700">내용 <span className="text-red-500">*</span></label>
+        <label className="text-sm sm:text-xs font-medium text-gray-700">내용 <span className="text-red-500">*</span></label>
         <textarea name="content" required rows={4} placeholder="클레임 내용을 구체적으로 입력하세요..."
-          className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#1F3864] outline-none resize-none" />
+          className="rounded-xl border border-gray-300 px-4 py-3 sm:py-2 text-base sm:text-sm focus:border-[#1F3864] outline-none resize-none" />
       </div>
 
-      <button type="submit" disabled={loading}
-        className="w-full py-3.5 bg-red-600 text-white font-semibold rounded-xl text-sm hover:bg-red-700 active:scale-95 disabled:opacity-60 transition-all">
-        {loading ? "접수 중..." : "클레임 접수"}
-      </button>
+      {/* 제출 버튼 — 모바일에서 하단 고정 */}
+      <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 -mx-5 -mb-5 sm:relative sm:border-t-0 sm:p-0 sm:mx-0 sm:mb-0">
+        <button type="submit" disabled={loading}
+          className="w-full h-14 sm:h-auto sm:py-3.5 bg-red-600 text-white font-bold sm:font-semibold rounded-xl text-base sm:text-sm hover:bg-red-700 active:scale-95 disabled:opacity-60 transition-all">
+          {loading ? "⏳ 접수 중..." : "클레임 접수"}
+        </button>
+      </div>
     </form>
   );
 }
@@ -467,9 +550,9 @@ function Field({ label, type, name, placeholder, defaultValue }: {
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-gray-700">{label}</label>
+      <label className="text-sm sm:text-xs font-medium text-gray-700">{label}</label>
       <input type={type} name={name} placeholder={placeholder} defaultValue={defaultValue}
-        className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#1F3864] outline-none" />
+        className="rounded-xl border border-gray-300 px-4 py-3 sm:py-2 text-base sm:text-sm focus:border-[#1F3864] outline-none min-h-[48px] sm:min-h-0" />
     </div>
   );
 }
