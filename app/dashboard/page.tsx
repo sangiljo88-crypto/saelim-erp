@@ -8,6 +8,8 @@ import { kpiData, departments as sampleDepts } from "@/lib/sampleData";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { redirect } from "next/navigation";
+import { getKpiTargets } from "@/app/actions/kpi-targets";
+import type { KpiTarget } from "@/app/actions/kpi-targets";
 
 // ── 날짜 유틸 ─────────────────────────────────────────────────
 function getDateRange(period: string, from?: string, to?: string) {
@@ -195,6 +197,13 @@ export default async function DashboardPage({
     db.from("cost_approvals").select("*", { count: "exact", head: true })
       .eq("status", "pending"),
   ]);
+
+  // ── KPI 목표치 (DB 우선, 없으면 하드코딩 폴백) ─────────────
+  const dbKpiTargets: KpiTarget[] = await getKpiTargets(new Date().getFullYear(), "전사");
+  const kpiTargetMap: Record<string, number> = {};
+  for (const t of dbKpiTargets) {
+    kpiTargetMap[t.kpi_key] = t.target_value;
+  }
 
   // ── KPI 집계 ─────────────────────────────────────────────
   const kpiByKey: Record<string, number[]> = {};
@@ -467,7 +476,17 @@ export default async function DashboardPage({
         {/* ── KPI 카드 ── */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">핵심 지표</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">핵심 지표</h2>
+              {session.role === "ceo" && (
+                <a
+                  href="/settings/kpi"
+                  className="text-xs text-[#1F3864] hover:text-[#2a4a7f] hover:bg-blue-50 px-2 py-1 rounded-lg transition-colors"
+                >
+                  ⚙️ 목표 설정
+                </a>
+              )}
+            </div>
             {!fromDB && (
               <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-semibold animate-pulse">
                 ⚠️ 샘플 데이터 · 회계팀 KPI 입력 시 실제 수치로 대체됩니다
@@ -478,50 +497,50 @@ export default async function DashboardPage({
             <KPICard
               title={period === "today" ? "매출 (오늘)" : period === "week" ? "매출 (이번 주)" : months.length > 1 ? `매출 (${months.length}개월 합)` : "매출 (이번 달)"}
               actual={revenue}
-              target={revenueTarget || kpiData.revenue.target}
+              target={revenueTarget || kpiTargetMap["revenue"] || kpiData.revenue.target}
               unit="원"
               icon="💰"
-              isGood={revenue >= (revenueTarget || kpiData.revenue.target)}
+              isGood={revenue >= (revenueTarget || kpiTargetMap["revenue"] || kpiData.revenue.target)}
             />
             <KPICard
               title="영업이익률"
               actual={profitMargin}
-              target={kpiTargetByKey["profit_margin"] || kpiData.profitMargin.target}
+              target={kpiTargetByKey["profit_margin"] || kpiTargetMap["profit_margin"] || kpiData.profitMargin.target}
               unit="%"
               icon="📈"
-              isGood={profitMargin >= (kpiTargetByKey["profit_margin"] || kpiData.profitMargin.target)}
+              isGood={profitMargin >= (kpiTargetByKey["profit_margin"] || kpiTargetMap["profit_margin"] || kpiData.profitMargin.target)}
             />
             <KPICard
               title="현금잔고"
               actual={cashBalance}
-              target={kpiTargetByKey["cash_balance"] || kpiData.cashBalance.target}
+              target={kpiTargetByKey["cash_balance"] || kpiTargetMap["cash_balance"] || kpiData.cashBalance.target}
               unit="원"
               icon="🏦"
-              isGood={cashBalance >= (kpiTargetByKey["cash_balance"] || kpiData.cashBalance.target)}
+              isGood={cashBalance >= (kpiTargetByKey["cash_balance"] || kpiTargetMap["cash_balance"] || kpiData.cashBalance.target)}
             />
             <KPICard
               title="미수금"
               actual={receivables}
-              target={kpiTargetByKey["receivables"] || kpiData.receivables.target}
+              target={kpiTargetByKey["receivables"] || kpiTargetMap["receivables"] || kpiData.receivables.target}
               unit="원"
               icon="⚠️"
-              isGood={receivables <= (kpiTargetByKey["receivables"] || kpiData.receivables.target)}
+              isGood={receivables <= (kpiTargetByKey["receivables"] || kpiTargetMap["receivables"] || kpiData.receivables.target)}
             />
             <KPICard
               title="클레임"
               actual={periodClaimsCount ?? 0}
-              target={kpiData.claims.target}
+              target={kpiTargetMap["claims"] ?? kpiData.claims.target}
               unit="건"
               icon="📋"
-              isGood={(periodClaimsCount ?? 0) <= kpiData.claims.target}
+              isGood={(periodClaimsCount ?? 0) <= (kpiTargetMap["claims"] ?? kpiData.claims.target)}
             />
             <KPICard
               title="수율"
               actual={avgYield ?? kpiData.yieldRate.actual}
-              target={kpiData.yieldRate.target}
+              target={kpiTargetMap["yield"] ?? kpiData.yieldRate.target}
               unit="%"
               icon="🏭"
-              isGood={(avgYield ?? kpiData.yieldRate.actual) >= kpiData.yieldRate.target}
+              isGood={(avgYield ?? kpiData.yieldRate.actual) >= (kpiTargetMap["yield"] ?? kpiData.yieldRate.target)}
             />
           </div>
         </section>
