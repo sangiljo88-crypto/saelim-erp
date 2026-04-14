@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { submitDeptReport } from "@/app/actions/submit";
+import { submitDeptReport } from "@/app/actions/reporting";
 
 interface ExistingReport {
   id: string;

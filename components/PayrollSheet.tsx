@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { savePayrollMonth, bulkUpdateBaseSalaries } from "@/app/actions/submit";
+import { savePayrollMonth, bulkUpdateBaseSalaries } from "@/app/actions/hr";
 
 interface StaffPayroll {
   login_id: string;

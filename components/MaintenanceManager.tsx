@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { submitMaintenanceLog } from "@/app/actions/submit";
+import { submitMaintenanceLog } from "@/app/actions/production";
 
 export interface MaintenanceLog {
   id: string;

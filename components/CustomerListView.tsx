@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { saveCustomer } from "@/app/actions/submit";
+import { saveCustomer } from "@/app/actions/sales";
 
 interface Customer {
   id: string;

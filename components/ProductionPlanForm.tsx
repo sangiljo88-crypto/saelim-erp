@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { submitProductionPlan } from "@/app/actions/submit";
+import { submitProductionPlan } from "@/app/actions/production";
 
 // ── 팀별 기본 작업 템플릿 (실제 업무지시 기반) ───────────────────────────────
 const DEPT_TEMPLATES: Record<string, { task: string; pkg_unit_g: number }[]> = {

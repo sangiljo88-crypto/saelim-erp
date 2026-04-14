@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { submitUtilityLog } from "@/app/actions/submit";
+import { submitUtilityLog } from "@/app/actions/production";
 
 export interface UtilityLog {
   id: string;

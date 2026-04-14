@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { saveFrozenInventory } from "@/app/actions/submit";
+import { saveFrozenInventory } from "@/app/actions/inventory";
 
 // ── 창고별 품목 템플릿 (실제 엑셀 기준) ──────────────────────────────────────
 type TplItem = { name: string; unit: string };

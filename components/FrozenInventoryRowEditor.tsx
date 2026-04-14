@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { updateFrozenInventoryRow } from "@/app/actions/submit";
+import { updateFrozenInventoryRow } from "@/app/actions/inventory";
 
 interface Row {
   id: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { submitCostApprovalRequest, approveCostRequest } from "@/app/actions/submit";
+import { submitCostApprovalRequest, approveCostRequest } from "@/app/actions/finance";
 
 interface Approval {
   id: string;

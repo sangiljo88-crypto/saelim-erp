@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { submitContainerInventory } from "@/app/actions/submit";
+import { submitContainerInventory } from "@/app/actions/inventory";
 
 const LOCATIONS = ["2번냉동실", "3번냉동실", "냉장실", "원료냉동실", "완제품냉동실"];
 

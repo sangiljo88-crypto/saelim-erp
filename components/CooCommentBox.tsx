@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { saveCooComment } from "@/app/actions/submit";
+import { saveCooComment } from "@/app/actions/reporting";
 import { RAG_DOT } from "@/lib/constants";
 
 interface Props {

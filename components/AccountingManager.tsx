@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
-import { recordPurchasePayment, recordCashFlow } from "@/app/actions/submit";
+import { recordPurchasePayment, recordCashFlow } from "@/app/actions/finance";
 
 interface CashFlow {
   id: string;

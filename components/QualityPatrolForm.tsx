@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { submitQualityPatrol } from "@/app/actions/submit";
+import { submitQualityPatrol } from "@/app/actions/quality";
 
 const PATROL_AREAS = ["생산라인 A", "생산라인 B", "냉장·냉동창고", "가공팀 작업장", "스킨팀 작업장", "포장실", "원료보관소", "폐기물보관소", "탈의실·화장실", "차량·외부"];
 

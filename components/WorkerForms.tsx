@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { submitProductionLog, submitHygieneCheck, submitClaim } from "@/app/actions/submit";
+import { submitProductionLog, submitHygieneCheck, submitClaim } from "@/app/actions/production";
 import DeliveryForm from "@/components/DeliveryForm";
 
 interface Props {

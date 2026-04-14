@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { saveMonthlyKpi } from "@/app/actions/submit";
+import { saveMonthlyKpi } from "@/app/actions/finance";
 
 interface Props {
   yearMonth: string; // "2026-04"

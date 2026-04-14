@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { updateClaimStatus } from "@/app/actions/submit";
+import { updateClaimStatus } from "@/app/actions/quality";
 
 interface Claim {
   id: string;

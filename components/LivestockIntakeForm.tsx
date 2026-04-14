@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { submitLivestockIntake } from "@/app/actions/submit";
+import { submitLivestockIntake } from "@/app/actions/production";
 
 export default function LivestockIntakeForm() {
   const today = new Date().toISOString().split("T")[0];

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { submitBriefing, updateBriefing } from "@/app/actions/submit";
+import { submitBriefing, updateBriefing } from "@/app/actions/reporting";
 
 const WEEK_LABELS = (() => {
   const labels: string[] = [];

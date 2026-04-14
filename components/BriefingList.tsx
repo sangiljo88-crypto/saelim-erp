@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { toggleBriefingPin, deleteBriefing } from "@/app/actions/submit";
+import { toggleBriefingPin, deleteBriefing } from "@/app/actions/reporting";
 
 export interface BriefingSummary {
   id: string;

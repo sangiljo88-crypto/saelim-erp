@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { submitDelivery } from "@/app/actions/submit";
+import { submitDelivery } from "@/app/actions/sales";
 import { getCustomerPriceMap } from "@/app/actions/pricing";
 
 interface Customer {

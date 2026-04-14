@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { saveCostApproval } from "@/app/actions/submit";
+import { saveCostApproval } from "@/app/actions/finance";
 
 interface ApprovalItem {
   id: string;

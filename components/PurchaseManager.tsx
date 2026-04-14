@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { recordMaterialPurchase, updatePurchaseRemaining } from "@/app/actions/submit";
+import { recordMaterialPurchase, updatePurchaseRemaining } from "@/app/actions/finance";
 import { calculateFifo, calculateWeightedAvg, type PurchaseBatch } from "@/lib/fifo";
 
 interface Purchase {

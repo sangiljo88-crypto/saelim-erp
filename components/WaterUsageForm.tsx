@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { submitWaterUsage } from "@/app/actions/submit";
+import { submitWaterUsage } from "@/app/actions/production";
 
 export default function WaterUsageForm({
   recentData,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createStaffMember, toggleMemberActive, resetMemberPassword, saveStaffSalary } from "@/app/actions/submit";
+import { createStaffMember, toggleMemberActive, resetMemberPassword, saveStaffSalary } from "@/app/actions/hr";
 
 interface StaffMember {
   id: string;

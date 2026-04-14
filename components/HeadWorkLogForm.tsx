@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { submitHeadWorkLog } from "@/app/actions/submit";
+import { submitHeadWorkLog } from "@/app/actions/production";
 
 const HEAD_WORKERS    = ["조나", "수닐", "바하두루", "마잉", "라이", "로한"];
 const INNARD_WORKERS  = ["베라", "마잉", "미선", "로한"];

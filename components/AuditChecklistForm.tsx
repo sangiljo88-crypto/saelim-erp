@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { submitAuditChecklist } from "@/app/actions/submit";
+import { submitAuditChecklist } from "@/app/actions/quality";
 
 const AUDIT_ITEMS = [
   // 원료 및 제품 관리

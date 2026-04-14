@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { saveCustomer } from "@/app/actions/submit";
+import { saveCustomer } from "@/app/actions/sales";
 
 // ── 타입 ──────────────────────────────────────────────────────
 interface DeliveryStats {

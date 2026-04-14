@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { submitWorkOrder } from "@/app/actions/submit";
+import { submitWorkOrder } from "@/app/actions/production";
 
 interface WorkItem {
   product: string;

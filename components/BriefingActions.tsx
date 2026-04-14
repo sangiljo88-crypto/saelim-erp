@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { deleteBriefing } from "@/app/actions/submit";
+import { deleteBriefing } from "@/app/actions/reporting";
 
 export default function BriefingActions({ briefingId }: { briefingId: string }) {
   const router = useRouter();

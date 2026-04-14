@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { updateClaimStatus, updateClaimDetails, fetchClaimTraceability } from "@/app/actions/submit";
+import { updateClaimStatus, updateClaimDetails, fetchClaimTraceability } from "@/app/actions/quality";
 import { addCommunicationLog, updateClaimSla } from "@/app/actions/claim-sla";
 
 interface CommunicationEntry {
