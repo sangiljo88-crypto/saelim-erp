@@ -751,6 +751,27 @@ export default async function TeamPage() {
           </section>
         )}
 
+        {/* 배송팀 전용: 배차일지 바로가기 */}
+        {showDeliveries && (
+          <section>
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">배차 관리</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <a href="/dispatch" className="bg-white rounded-xl border border-gray-200 p-5 hover:border-[#1F3864] hover:shadow-md transition-all group">
+                <div className="text-2xl mb-2">🚚</div>
+                <div className="font-bold text-gray-800 group-hover:text-[#1F3864]">배차일지 작성</div>
+                <div className="text-xs text-gray-500 mt-1">출발/도착 키로수, 방문처, 특이사항 기록</div>
+              </a>
+              <a href="/dispatch/fuel" className="bg-white rounded-xl border border-gray-200 p-5 hover:border-[#1F3864] hover:shadow-md transition-all group">
+                <div className="text-2xl mb-2">⛽</div>
+                <div className="font-bold text-gray-800 group-hover:text-[#1F3864]">유류비 분석</div>
+                <div className="text-xs text-gray-500 mt-1">월별 차량별 주행거리·추정 유류비 확인</div>
+              </a>
+            </div>
+          </section>
+        )}
+
         {/* 회계팀 전용: 월간 KPI 입력 */}
         {showMonthlyKpi && (
           <section>
