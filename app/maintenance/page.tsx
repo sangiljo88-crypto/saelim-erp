@@ -36,12 +36,20 @@ export default async function MaintenancePage() {
             <h1 className="text-lg font-bold text-gray-800">설비 수리 이력 관리</h1>
             <p className="text-sm text-gray-500">설비별 점검·수리·교체 이력 기록 및 예정일 관리</p>
           </div>
-          <a
-            href={session.role === "ceo" ? "/dashboard" : "/coo"}
-            className="text-xs text-[#1F3864] hover:underline"
-          >
-            ← 대시보드
-          </a>
+          <div className="flex gap-2 items-center">
+            <a
+              href="/maintenance/schedule"
+              className="flex items-center gap-1.5 text-xs bg-purple-50 border border-purple-200 text-purple-700 px-3 py-1.5 rounded-lg hover:bg-purple-100 transition-colors font-medium"
+            >
+              📅 정비 스케줄
+            </a>
+            <a
+              href={session.role === "ceo" ? "/dashboard" : "/coo"}
+              className="text-xs text-[#1F3864] hover:underline"
+            >
+              대시보드
+            </a>
+          </div>
         </div>
 
         {/* 요약 배너 */}

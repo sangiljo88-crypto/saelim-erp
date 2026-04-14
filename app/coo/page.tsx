@@ -11,6 +11,7 @@ import { createServerClient } from "@/lib/supabase";
 import { alerts } from "@/lib/sampleData";
 import { getProducts } from "@/app/actions/products";
 import { getExpiryAlerts } from "@/app/actions/expiry";
+import { getOverdueSchedules, getSpareParts } from "@/app/actions/preventive-maintenance";
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
@@ -127,6 +128,20 @@ export default async function COOPage() {
     safetyStockMap.set(p.name, p.safety_stock);
   }
 
+  // 예방정비 지연 + 부품 부족 조회
+  let overdueMaintenanceCount = 0;
+  let lowSparePartsCount = 0;
+  try {
+    const [overdueSchedules, spareParts] = await Promise.all([
+      getOverdueSchedules(),
+      getSpareParts(),
+    ]);
+    overdueMaintenanceCount = overdueSchedules.length;
+    lowSparePartsCount = spareParts.filter((p) => p.current_stock < p.min_stock).length;
+  } catch {
+    // 테이블 미존재 시 무시
+  }
+
   const delayedActions = actionItems.filter((a) => a.status === "지연").length;
   const pendingApprovals = (costApprovals ?? []).length;
   const reportSubmitted = latestByDept.size;
@@ -204,6 +219,22 @@ export default async function COOPage() {
             className="flex items-center gap-2 bg-white rounded-xl border border-orange-200 px-4 py-2.5 hover:bg-orange-50 transition-colors text-sm font-medium text-orange-700"
           >
             <span>🔧</span> 설비 관리
+            {overdueMaintenanceCount > 0 && (
+              <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold">
+                지연 {overdueMaintenanceCount}
+              </span>
+            )}
+          </a>
+          <a
+            href="/maintenance/schedule"
+            className="flex items-center gap-2 bg-white rounded-xl border border-purple-200 px-4 py-2.5 hover:bg-purple-50 transition-colors text-sm font-medium text-purple-700"
+          >
+            <span>📅</span> 정비 스케줄
+            {lowSparePartsCount > 0 && (
+              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">
+                부품부족 {lowSparePartsCount}
+              </span>
+            )}
           </a>
           <a
             href="/utility"
