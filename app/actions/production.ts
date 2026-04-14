@@ -3,6 +3,7 @@
 import { createServerClient } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { createLot } from "@/app/actions/lot-tracking";
 
 export async function submitProductionLog(formData: FormData) {
   const session = await getSession();
@@ -24,6 +25,23 @@ export async function submitProductionLog(formData: FormData) {
   });
 
   if (error) throw new Error(error.message);
+
+  // 생산일지 저장 성공 시 자동으로 LOT 생성
+  try {
+    await createLot({
+      production_date: formData.get("date") as string,
+      product_code: (formData.get("product_id") as string) || undefined,
+      product_name: formData.get("product_name") as string,
+      dept: session.dept ?? undefined,
+      output_qty: Number(formData.get("output_qty")) || 0,
+      input_qty: Number(formData.get("input_qty")) || 0,
+      worker_name: session.name,
+      worker_id: session.id,
+    });
+  } catch {
+    // LOT 테이블 미존재 등의 경우 무시 — 생산일지 자체는 이미 저장됨
+  }
+
   return { success: true };
 }
 

@@ -214,6 +214,12 @@ export default async function COOPage() {
             {utilityRisk === "yellow" && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">주의</span>}
           </a>
           <a
+            href="/lot"
+            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
+          >
+            <span>📦</span> LOT 추적
+          </a>
+          <a
             href="/settings/kpi"
             className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
           >
