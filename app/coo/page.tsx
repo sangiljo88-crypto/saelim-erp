@@ -293,6 +293,12 @@ export default async function COOPage() {
             <span>💰</span> 원가분석
           </a>
           <a
+            href="/procurement"
+            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
+          >
+            <span>📋</span> 자재소요계획
+          </a>
+          <a
             href="/inventory"
             className={`flex items-center gap-2 bg-white rounded-xl border px-4 py-2.5 hover:bg-orange-50 transition-colors text-sm font-medium ${
               expiryAlertCount > 0 ? "border-orange-300 text-orange-700" : "border-[#1F3864]/20 text-[#1F3864]"

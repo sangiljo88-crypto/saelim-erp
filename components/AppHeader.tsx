@@ -113,6 +113,11 @@ export default async function AppHeader({ session, subtitle }: { session: Sessio
             📦 매입관리
           </a>
         )}
+        {(session.role === "coo" || session.role === "ceo" || (session.role === "manager" && ["재고팀", "생산팀"].includes(session.dept ?? ""))) && (
+          <a href="/procurement" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
+            📋 자재소요
+          </a>
+        )}
         {(session.role === "coo" || session.role === "ceo") && (
           <a href="/accounting" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
             🧾 회계
