@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { submitProductionLog, submitHygieneCheck, submitClaim } from "@/app/actions/submit";
 import DeliveryForm from "@/components/DeliveryForm";
 
@@ -218,6 +218,26 @@ function ProductionForm({
   const [loading, setLoading] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
+  // ── 최근 사용 제품 (localStorage) ──
+  const RECENT_KEY = "saelim_recent_products";
+  const [recentProducts, setRecentProducts] = useState<{ code: string; name: string }[]>([]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(RECENT_KEY);
+      if (stored) setRecentProducts(JSON.parse(stored));
+    } catch { /* SSR / parse 오류 무시 */ }
+  }, []);
+
+  function saveRecentProduct(code: string, name: string) {
+    setRecentProducts((prev) => {
+      const deduped = prev.filter((p) => p.code !== code);
+      const next = [{ code, name }, ...deduped].slice(0, 5);
+      try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* 무시 */ }
+      return next;
+    });
+  }
+
   const filtered = category === "전체" ? PRODUCT_CATALOG : PRODUCT_CATALOG.filter((p) => p.category === category);
   const activeProduct = PRODUCT_CATALOG.find((p) => p.id === selectedProduct);
   const unit = customMode ? "kg" : (activeProduct?.unit ?? "kg");
@@ -241,9 +261,12 @@ function ProductionForm({
     setLoading(true);
     try {
       const fd = new FormData(formRef.current!);
-      fd.set("product_id",   customMode ? "custom"             : selectedProduct!);
-      fd.set("product_name", customMode ? customName           : activeProduct!.name);
+      const productCode = customMode ? "custom"   : selectedProduct!;
+      const productName = customMode ? customName : activeProduct!.name;
+      fd.set("product_id",   productCode);
+      fd.set("product_name", productName);
       await submitProductionLog(fd);
+      saveRecentProduct(productCode, productName);
       onSuccess();
     } catch (err) {
       onError((err as Error).message);
@@ -278,6 +301,37 @@ function ProductionForm({
             {customMode ? "✕ 직접입력 취소" : "✏️ 직접 입력"}
           </button>
         </div>
+
+        {/* 최근 사용 제품 */}
+        {!customMode && recentProducts.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs text-gray-400">최근 사용</span>
+            <div className="flex flex-wrap gap-1.5">
+              {recentProducts.map((rp) => (
+                <button
+                  key={rp.code}
+                  type="button"
+                  onClick={() => {
+                    if (rp.code === "custom") {
+                      setCustomMode(true);
+                      setCustomName(rp.name);
+                      setSelectedProduct(null);
+                    } else {
+                      setCustomMode(false);
+                      setCustomName("");
+                      setSelectedProduct(rp.code);
+                    }
+                  }}
+                  className={`bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-full text-xs cursor-pointer hover:bg-blue-100 transition-colors ${
+                    selectedProduct === rp.code ? "ring-2 ring-blue-400" : ""
+                  }`}
+                >
+                  {rp.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {customMode ? (
           <input type="text" value={customName} onChange={(e) => setCustomName(e.target.value)}
