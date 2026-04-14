@@ -8,7 +8,7 @@ import { logAudit } from "@/lib/audit";
 // ── 직원 등록 (COO 전용) ─────────────────────────────────────────
 export async function createStaffMember(formData: FormData) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (!session || session.role !== "coo") return { success: false, error: "COO 권한 필요" };
 
   const { hashPassword } = await import("@/lib/hash");
   const db = createServerClient();
@@ -19,7 +19,7 @@ export async function createStaffMember(formData: FormData) {
   const role     = formData.get("role") as string;
   const dept     = (formData.get("dept") as string)?.trim() || null;
 
-  if (!login_id || !password || !name || !role) return { error: "필수 항목 누락" };
+  if (!login_id || !password || !name || !role) return { success: false, error: "필수 항목 누락" };
 
   const { error } = await db.from("members").insert({
     login_id,
@@ -32,9 +32,9 @@ export async function createStaffMember(formData: FormData) {
 
   if (error) {
     if (error.message.includes("unique") || error.message.includes("duplicate")) {
-      return { error: `아이디 '${login_id}'가 이미 존재합니다` };
+      return { success: false, error: `아이디 '${login_id}'가 이미 존재합니다` };
     }
-    return { error: error.message };
+    return { success: false, error: error.message };
   }
   revalidatePath("/staff");
   return { success: true };
@@ -43,7 +43,7 @@ export async function createStaffMember(formData: FormData) {
 // ── 직원 활성/비활성 토글 (COO 전용) ────────────────────────
 export async function toggleMemberActive(memberId: string, active: boolean) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (!session || session.role !== "coo") return { success: false, error: "COO 권한 필요" };
 
   const db = createServerClient();
   const { error } = await db
@@ -51,7 +51,7 @@ export async function toggleMemberActive(memberId: string, active: boolean) {
     .update({ active })
     .eq("id", memberId);
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/staff");
   return { success: true };
 }
@@ -59,8 +59,8 @@ export async function toggleMemberActive(memberId: string, active: boolean) {
 // ── 직원 비밀번호 변경 (COO 전용) ───────────────────────────
 export async function resetMemberPassword(memberId: string, newPassword: string) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
-  if (!newPassword || newPassword.length < 4) return { error: "비밀번호는 4자 이상" };
+  if (!session || session.role !== "coo") return { success: false, error: "COO 권한 필요" };
+  if (!newPassword || newPassword.length < 4) return { success: false, error: "비밀번호는 4자 이상" };
 
   const { hashPassword } = await import("@/lib/hash");
   const db = createServerClient();
@@ -69,7 +69,7 @@ export async function resetMemberPassword(memberId: string, newPassword: string)
     .update({ password: hashPassword(newPassword) })
     .eq("id", memberId);
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/staff");
   return { success: true };
 }
@@ -82,9 +82,9 @@ export async function saveStaffSalary(
   baseSalary: number
 ) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (!session || session.role !== "coo") return { success: false, error: "COO 권한 필요" };
 
-  if (baseSalary < 0) return { error: "기본급은 0 이상이어야 합니다." };
+  if (baseSalary < 0) return { success: false, error: "기본급은 0 이상이어야 합니다." };
 
   const db = createServerClient();
   const { error } = await db.from("staff_salaries").upsert(
@@ -99,7 +99,7 @@ export async function saveStaffSalary(
     { onConflict: "login_id" }
   );
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
 
   await logAudit({
     action: "update",
@@ -134,13 +134,13 @@ export async function savePayrollMonth(
   }>
 ) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (!session || session.role !== "coo") return { success: false, error: "COO 권한 필요" };
 
   const db = createServerClient();
 
   // 금액 음수 검증
   const hasNeg = records.some((r) => r.base_salary < 0 || r.total_pay < 0);
-  if (hasNeg) return { error: "급여 금액은 0 이상이어야 합니다." };
+  if (hasNeg) return { success: false, error: "급여 금액은 0 이상이어야 합니다." };
 
   // 급여 기록 일괄 upsert
   const rows = records.map((r) => ({
@@ -153,7 +153,7 @@ export async function savePayrollMonth(
     .from("payroll_records")
     .upsert(rows, { onConflict: "year_month,login_id" });
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
 
   // monthly_kpi 인건비 자동 동기화
   const totalLaborCost = records.reduce((s, r) => s + r.total_pay, 0);
@@ -179,7 +179,7 @@ export async function bulkUpdateBaseSalaries(
   updates: Array<{ login_id: string; name: string; dept: string | null; base_salary: number }>
 ) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (!session || session.role !== "coo") return { success: false, error: "COO 권한 필요" };
 
   const db = createServerClient();
   const rows = updates.map((u) => ({
@@ -192,7 +192,7 @@ export async function bulkUpdateBaseSalaries(
     .from("staff_salaries")
     .upsert(rows, { onConflict: "login_id" });
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/staff");
   revalidatePath("/payroll");
   return { success: true };

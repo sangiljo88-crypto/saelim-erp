@@ -10,7 +10,7 @@ export async function submitDeptReport(
   formData: FormData
 ) {
   const session = await getSession();
-  if (!session || session.role !== "manager") return { error: "팀장 권한 필요" };
+  if (!session || session.role !== "manager") return { success: false, error: "팀장 권한 필요" };
 
   const db = createServerClient();
   const dept = session.dept ?? "";
@@ -31,7 +31,7 @@ export async function submitDeptReport(
     .from("dept_reports")
     .upsert(payload, { onConflict: "report_date,dept" });
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/team");
   return { success: true };
 }
@@ -98,10 +98,10 @@ export async function updateBriefing(id: string, data: {
 // ── 브리핑 삭제 (COO 전용) ────────────────────────────────────
 export async function deleteBriefing(id: string) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (!session || session.role !== "coo") return { success: false, error: "COO 권한 필요" };
   const db = createServerClient();
   const { error } = await db.from("briefings").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/briefings");
   return { success: true };
 }
@@ -109,10 +109,10 @@ export async function deleteBriefing(id: string) {
 // ── 브리핑 핀 토글 (COO 전용) ────────────────────────────────
 export async function toggleBriefingPin(id: string, is_pinned: boolean) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (!session || session.role !== "coo") return { success: false, error: "COO 권한 필요" };
   const db = createServerClient();
   const { error } = await db.from("briefings").update({ is_pinned }).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/briefings");
   return { success: true };
 }
@@ -120,7 +120,7 @@ export async function toggleBriefingPin(id: string, is_pinned: boolean) {
 // ── COO 코멘트 저장 ──────────────────────────────────────────
 export async function saveCooComment(reportId: string, comment: string) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (!session || session.role !== "coo") return { success: false, error: "COO 권한 필요" };
 
   const db = createServerClient();
   const { error } = await db
@@ -133,7 +133,7 @@ export async function saveCooComment(reportId: string, comment: string) {
     })
     .eq("id", reportId);
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/coo");
   revalidatePath("/dashboard");
   return { success: true };

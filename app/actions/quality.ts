@@ -61,11 +61,11 @@ export async function updateClaimStatus(
   status: "pending" | "in_progress" | "resolved"
 ) {
   const session = await getSession();
-  if (!session) return { error: "로그인 필요" };
+  if (!session) return { success: false, error: "로그인 필요" };
 
   const isCoo     = session.role === "coo";
   const isManager = session.role === "manager" && CLAIM_ALLOWED_DEPTS.has(session.dept ?? "");
-  if (!isCoo && !isManager) return { error: "권한 없음 (COO 또는 CS·품질·배송팀장)" };
+  if (!isCoo && !isManager) return { success: false, error: "권한 없음 (COO 또는 CS·품질·배송팀장)" };
 
   const db = createServerClient();
   const { error } = await db
@@ -73,7 +73,7 @@ export async function updateClaimStatus(
     .update({ status })
     .eq("id", claimId);
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/claims");
   revalidatePath("/coo");
   revalidatePath("/team");

@@ -9,7 +9,7 @@ import { logAudit } from "@/lib/audit";
 export async function saveMonthlyKpi(formData: FormData) {
   const session = await getSession();
   if (!session || session.role !== "manager" || session.dept !== "회계팀") {
-    return { error: "회계팀 팀장 권한 필요" };
+    return { success: false, error: "회계팀 팀장 권한 필요" };
   }
 
   const db        = createServerClient();
@@ -31,7 +31,7 @@ export async function saveMonthlyKpi(formData: FormData) {
     .from("monthly_kpi")
     .upsert(rows, { onConflict: "year_month,dept,kpi_key" });
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
 
   revalidatePath("/dashboard");
   revalidatePath("/team");
@@ -41,7 +41,7 @@ export async function saveMonthlyKpi(formData: FormData) {
 // ── COO 비용 승인/반려 ────────────────────────────────────────
 export async function saveCostApproval(itemId: string, status: "approved" | "rejected", comment: string) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
+  if (!session || session.role !== "coo") return { success: false, error: "COO 권한 필요" };
 
   const db = createServerClient();
   const { error } = await db
@@ -54,7 +54,7 @@ export async function saveCostApproval(itemId: string, status: "approved" | "rej
     })
     .eq("id", itemId);
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
 
   await logAudit({
     action: "update",
@@ -73,7 +73,7 @@ export async function saveCostApproval(itemId: string, status: "approved" | "rej
 // ── 비용 승인/반려 (COO + CEO) ────────────────────────────────
 export async function approveCostRequest(itemId: string, status: "approved" | "rejected", comment: string) {
   const session = await getSession();
-  if (!session || (session.role !== "coo" && session.role !== "ceo")) return { error: "COO/CEO 권한 필요" };
+  if (!session || (session.role !== "coo" && session.role !== "ceo")) return { success: false, error: "COO/CEO 권한 필요" };
 
   const db = createServerClient();
   const { error } = await db
@@ -86,7 +86,7 @@ export async function approveCostRequest(itemId: string, status: "approved" | "r
     })
     .eq("id", itemId);
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/approvals");
   revalidatePath("/coo");
   revalidatePath("/dashboard");
@@ -97,11 +97,11 @@ export async function approveCostRequest(itemId: string, status: "approved" | "r
 export async function submitCostApprovalRequest(formData: FormData) {
   const session = await getSession();
   if (!session || (session.role !== "manager" && session.role !== "coo")) {
-    return { error: "팀장 이상 권한 필요" };
+    return { success: false, error: "팀장 이상 권한 필요" };
   }
 
   const amount = Number(formData.get("amount")) || 0;
-  if (amount < 0) return { error: "금액은 0 이상이어야 합니다." };
+  if (amount < 0) return { success: false, error: "금액은 0 이상이어야 합니다." };
 
   const db = createServerClient();
   const { error } = await db.from("cost_approvals").insert({
@@ -113,7 +113,7 @@ export async function submitCostApprovalRequest(formData: FormData) {
     status:       "pending",
   });
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/approvals");
   revalidatePath("/coo");
   return { success: true };
@@ -134,11 +134,11 @@ export async function recordMaterialPurchase(data: {
 }) {
   const session = await getSession();
   if (!session || (session.role !== "coo" && session.role !== "manager")) {
-    return { error: "COO/팀장 권한 필요" };
+    return { success: false, error: "COO/팀장 권한 필요" };
   }
 
-  if (data.quantity < 0) return { error: "수량은 0 이상이어야 합니다." };
-  if (data.unit_price < 0) return { error: "단가는 0 이상이어야 합니다." };
+  if (data.quantity < 0) return { success: false, error: "수량은 0 이상이어야 합니다." };
+  if (data.unit_price < 0) return { success: false, error: "단가는 0 이상이어야 합니다." };
 
   const db         = createServerClient();
   const total_cost = Math.round(data.quantity * data.unit_price);
@@ -151,7 +151,7 @@ export async function recordMaterialPurchase(data: {
     recorded_by:   session.name,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
 
   await logAudit({
     action: "create",
@@ -212,8 +212,8 @@ export async function recordMaterialPurchase(data: {
 // ── 매입 배치 잔여수량 수정 (COO 전용) ───────────────────────
 export async function updatePurchaseRemaining(id: string, remaining_qty: number) {
   const session = await getSession();
-  if (!session || session.role !== "coo") return { error: "COO 권한 필요" };
-  if (remaining_qty < 0) return { error: "잔여수량은 0 이상" };
+  if (!session || session.role !== "coo") return { success: false, error: "COO 권한 필요" };
+  if (remaining_qty < 0) return { success: false, error: "잔여수량은 0 이상" };
 
   const db = createServerClient();
   const { error } = await db
@@ -221,7 +221,7 @@ export async function updatePurchaseRemaining(id: string, remaining_qty: number)
     .update({ remaining_qty })
     .eq("id", id);
 
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/purchases");
   return { success: true };
 }
@@ -242,9 +242,9 @@ export async function recordPurchasePayment(data: {
 }) {
   const session = await getSession();
   if (!session || (session.role !== "coo" && session.role !== "ceo")) {
-    return { error: "COO/CEO 권한 필요" };
+    return { success: false, error: "COO/CEO 권한 필요" };
   }
-  if (data.amount < 0) return { error: "결제 금액은 0 이상이어야 합니다." };
+  if (data.amount < 0) return { success: false, error: "결제 금액은 0 이상이어야 합니다." };
 
   const db = createServerClient();
 
@@ -253,7 +253,7 @@ export async function recordPurchasePayment(data: {
     ...data,
     recorded_by: session.name,
   });
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
 
   // 2. cash_flow_ledger에도 자동 기록 (매입결제 outflow)
   await db.from("cash_flow_ledger").insert({
@@ -304,16 +304,16 @@ export async function recordCashFlow(data: {
 }) {
   const session = await getSession();
   if (!session || (session.role !== "coo" && session.role !== "ceo")) {
-    return { error: "COO/CEO 권한 필요" };
+    return { success: false, error: "COO/CEO 권한 필요" };
   }
-  if (data.amount < 0) return { error: "금액은 0 이상이어야 합니다." };
+  if (data.amount < 0) return { success: false, error: "금액은 0 이상이어야 합니다." };
 
   const db = createServerClient();
   const { error } = await db.from("cash_flow_ledger").insert({
     ...data,
     recorded_by: session.name,
   });
-  if (error) return { error: error.message };
+  if (error) return { success: false, error: error.message };
   revalidatePath("/accounting");
   return { success: true };
 }
