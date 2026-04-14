@@ -311,9 +311,16 @@ export default function DeliveryHistory({
                         </div>
                       )}
 
-                      {/* 삭제 버튼 (canDelete && coo) */}
-                      {canDelete && (
-                        <div className="mt-3 flex justify-end">
+                      {/* 검품 기록 + 삭제 버튼 */}
+                      <div className="mt-3 flex items-center justify-between">
+                        <a
+                          href={`/inspection?delivery_id=${d.id}&customer=${encodeURIComponent(d.customer_name)}`}
+                          className="text-xs text-[#1F3864] hover:text-[#162c52] border border-[#1F3864]/30 hover:border-[#1F3864] px-3 py-1.5 rounded-lg transition-colors font-medium"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          📋 검품 기록
+                        </a>
+                        {canDelete && (
                           <button
                             className="text-xs text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition-colors"
                             onClick={(e) => {
@@ -325,8 +332,8 @@ export default function DeliveryHistory({
                           >
                             삭제
                           </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
