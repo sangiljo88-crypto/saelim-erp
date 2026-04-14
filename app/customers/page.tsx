@@ -95,9 +95,19 @@ export default async function CustomersPage() {
     <div className="min-h-screen bg-[#f0f2f5]">
       <AppHeader session={session} subtitle="거래처 관리" />
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
-        <div className="mb-5">
-          <h1 className="text-lg font-bold text-gray-800">🤝 거래처 관계 관리</h1>
-          <p className="text-sm text-gray-500 mt-0.5">납품 실적 · 클레임 이력 · 관계 건강도</p>
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-gray-800">🤝 거래처 관계 관리</h1>
+            <p className="text-sm text-gray-500 mt-0.5">납품 실적 · 클레임 이력 · 관계 건강도</p>
+          </div>
+          {(session.role === "coo" || session.role === "ceo") && (
+            <a
+              href="/customers/profitability"
+              className="flex items-center gap-2 bg-[#1F3864] text-white rounded-xl px-4 py-2.5 hover:bg-[#2a4a7f] transition-colors text-sm font-medium"
+            >
+              💰 수익성 분석
+            </a>
+          )}
         </div>
         <CustomerDashboard
           customers={enriched}
