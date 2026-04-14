@@ -11,7 +11,7 @@ export default async function ClaimsPage() {
   const db = createServerClient();
   const { data: claims } = await db
     .from("claims")
-    .select("id, claim_date, worker_name, dept, client_name, product_names, claim_type, content, status, created_at, production_date, root_cause")
+    .select("id, claim_date, worker_name, dept, client_name, product_names, claim_type, content, status, created_at, production_date, root_cause, first_response_at, resolved_at, compensation_type, compensation_amount, communication_log")
     .order("created_at", { ascending: false });
 
   const all       = claims ?? [];
@@ -30,12 +30,20 @@ export default async function ClaimsPage() {
             <h1 className="text-lg font-bold text-gray-800">클레임 관리</h1>
             <p className="text-sm text-gray-500">거래처 불만·품질 이슈 접수 및 처리 현황</p>
           </div>
-          <a
-            href={session.role === "ceo" ? "/dashboard" : "/coo"}
-            className="text-xs text-[#1F3864] hover:underline flex items-center gap-1"
-          >
-            ← 대시보드
-          </a>
+          <div className="flex items-center gap-3">
+            <a
+              href="/claims/sla"
+              className="text-xs bg-[#1F3864] text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-[#2a4a7f] transition-colors"
+            >
+              SLA 분석
+            </a>
+            <a
+              href={session.role === "ceo" ? "/dashboard" : "/coo"}
+              className="text-xs text-[#1F3864] hover:underline flex items-center gap-1"
+            >
+              ← 대시보드
+            </a>
+          </div>
         </div>
 
         {/* 요약 카드 */}

@@ -2,6 +2,14 @@
 
 import { useState } from "react";
 import { updateClaimStatus, updateClaimDetails, fetchClaimTraceability } from "@/app/actions/submit";
+import { addCommunicationLog, updateClaimSla } from "@/app/actions/claim-sla";
+
+interface CommunicationEntry {
+  date: string;
+  type: string;
+  content: string;
+  by: string;
+}
 
 interface Claim {
   id: string;
@@ -16,6 +24,11 @@ interface Claim {
   created_at: string;
   production_date?: string | null;
   root_cause?: string | null;
+  first_response_at?: string | null;
+  resolved_at?: string | null;
+  compensation_type?: string | null;
+  compensation_amount?: number | null;
+  communication_log?: CommunicationEntry[] | null;
 }
 
 type TraceResult = {
@@ -69,6 +82,13 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
   const [traceEdits, setTraceEdits]   = useState<Record<string, { production_date: string; root_cause: string }>>({});
   const [traceSaving, setTraceSaving] = useState<string | null>(null);
   const [traceData, setTraceData]     = useState<Record<string, TraceResult | "loading">>({});
+
+  // 소통 이력 관련 state
+  const [commType, setCommType]           = useState<Record<string, string>>({});
+  const [commContent, setCommContent]     = useState<Record<string, string>>({});
+  const [commSaving, setCommSaving]       = useState<string | null>(null);
+  const [compEdits, setCompEdits]         = useState<Record<string, { type: string; amount: string }>>({});
+  const [compSaving, setCompSaving]       = useState<string | null>(null);
 
   function getTraceEdit(claim: Claim) {
     return traceEdits[claim.id] ?? {
@@ -142,6 +162,59 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
       setErrors((prev) => ({ ...prev, [claim.id]: (err as Error).message }));
     } finally {
       setTraceSaving(null);
+    }
+  }
+
+  async function handleAddComm(claimId: string) {
+    const type = commType[claimId] || "phone";
+    const content = commContent[claimId] || "";
+    if (!content.trim()) return;
+    setCommSaving(claimId);
+    try {
+      const result = await addCommunicationLog(claimId, { type, content: content.trim() });
+      if (result.success && result.entry) {
+        setClaims((prev) =>
+          prev.map((c) => {
+            if (c.id !== claimId) return c;
+            const log = Array.isArray(c.communication_log) ? c.communication_log : [];
+            return { ...c, communication_log: [...log, result.entry as CommunicationEntry] };
+          })
+        );
+        setCommContent((prev) => ({ ...prev, [claimId]: "" }));
+      }
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, [claimId]: (err as Error).message }));
+    } finally {
+      setCommSaving(null);
+    }
+  }
+
+  async function handleSaveCompensation(claim: Claim) {
+    const edit = compEdits[claim.id] ?? {
+      type: claim.compensation_type ?? "없음",
+      amount: String(claim.compensation_amount ?? 0),
+    };
+    setCompSaving(claim.id);
+    try {
+      const result = await updateClaimSla(claim.id, {
+        compensation_type: edit.type,
+        compensation_amount: Number(edit.amount) || 0,
+      });
+      if (result.success) {
+        setClaims((prev) =>
+          prev.map((c) =>
+            c.id === claim.id
+              ? { ...c, compensation_type: edit.type, compensation_amount: Number(edit.amount) || 0 }
+              : c
+          )
+        );
+      } else {
+        setErrors((prev) => ({ ...prev, [claim.id]: result.error ?? "" }));
+      }
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, [claim.id]: (err as Error).message }));
+    } finally {
+      setCompSaving(null);
     }
   }
 
@@ -479,6 +552,117 @@ export default function ClaimsManager({ initialClaims }: { initialClaims: Claim[
                           )}
                         </div>
                       )}
+                    </div>
+
+                    {/* 보상 정보 */}
+                    <div className="border-t border-gray-200 pt-4">
+                      <div className="text-xs font-bold text-gray-700 mb-2">보상 정보</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-1">보상 유형</label>
+                          <select
+                            value={(compEdits[claim.id]?.type) ?? (claim.compensation_type ?? "없음")}
+                            onChange={(e) =>
+                              setCompEdits((prev) => ({
+                                ...prev,
+                                [claim.id]: {
+                                  ...(prev[claim.id] ?? { type: claim.compensation_type ?? "없음", amount: String(claim.compensation_amount ?? 0) }),
+                                  type: e.target.value,
+                                },
+                              }))
+                            }
+                            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          >
+                            <option value="없음">없음</option>
+                            <option value="대체납품">대체납품</option>
+                            <option value="환불">환불</option>
+                            <option value="할인">할인</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-1">보상 금액 (원)</label>
+                          <input
+                            type="number"
+                            value={(compEdits[claim.id]?.amount) ?? String(claim.compensation_amount ?? 0)}
+                            onChange={(e) =>
+                              setCompEdits((prev) => ({
+                                ...prev,
+                                [claim.id]: {
+                                  ...(prev[claim.id] ?? { type: claim.compensation_type ?? "없음", amount: String(claim.compensation_amount ?? 0) }),
+                                  amount: e.target.value,
+                                },
+                              }))
+                            }
+                            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            onClick={() => handleSaveCompensation(claim)}
+                            disabled={compSaving === claim.id}
+                            className="text-xs bg-[#1F3864] text-white px-4 py-1.5 rounded-lg font-semibold disabled:opacity-50 cursor-pointer hover:bg-[#2a4a7f]"
+                          >
+                            {compSaving === claim.id ? "저장중..." : "보상 저장"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 소통 이력 */}
+                    <div className="border-t border-gray-200 pt-4">
+                      <div className="text-xs font-bold text-gray-700 mb-2">소통 이력</div>
+
+                      {/* 기존 이력 목록 */}
+                      {(Array.isArray(claim.communication_log) && claim.communication_log.length > 0) ? (
+                        <div className="flex flex-col gap-1.5 mb-3">
+                          {claim.communication_log.map((entry, idx) => {
+                            const typeLabel = entry.type === "phone" ? "전화" : entry.type === "email" ? "이메일" : entry.type === "visit" ? "방문" : entry.type;
+                            const typeColor = entry.type === "phone" ? "bg-blue-100 text-blue-700" : entry.type === "email" ? "bg-purple-100 text-purple-700" : "bg-emerald-100 text-emerald-700";
+                            return (
+                              <div key={idx} className="bg-white border border-gray-100 rounded-lg px-3 py-2 text-xs">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${typeColor}`}>{typeLabel}</span>
+                                  <span className="text-gray-400">{entry.date ? new Date(entry.date).toLocaleString("ko-KR") : "-"}</span>
+                                  <span className="text-gray-500 font-medium">{entry.by}</span>
+                                </div>
+                                <div className="text-gray-700">{entry.content}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-400 mb-3">소통 이력이 없습니다</div>
+                      )}
+
+                      {/* 소통 추가 */}
+                      <div className="flex flex-col gap-2 bg-gray-50 rounded-lg p-3">
+                        <div className="text-xs text-gray-500 font-medium">소통 추가</div>
+                        <div className="flex gap-2 items-start">
+                          <select
+                            value={commType[claim.id] ?? "phone"}
+                            onChange={(e) => setCommType((prev) => ({ ...prev, [claim.id]: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 shrink-0"
+                          >
+                            <option value="phone">전화</option>
+                            <option value="email">이메일</option>
+                            <option value="visit">방문</option>
+                          </select>
+                          <textarea
+                            value={commContent[claim.id] ?? ""}
+                            onChange={(e) => setCommContent((prev) => ({ ...prev, [claim.id]: e.target.value }))}
+                            rows={2}
+                            placeholder="소통 내용을 입력하세요"
+                            className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+                          />
+                          <button
+                            onClick={() => handleAddComm(claim.id)}
+                            disabled={commSaving === claim.id || !(commContent[claim.id] ?? "").trim()}
+                            className="text-xs bg-[#1F3864] text-white px-3 py-1.5 rounded-lg font-semibold disabled:opacity-50 cursor-pointer hover:bg-[#2a4a7f] shrink-0"
+                          >
+                            {commSaving === claim.id ? "..." : "추가"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     {err && <p className="text-xs text-red-500">{err}</p>}
