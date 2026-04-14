@@ -3,11 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { upsertKpiTarget, initDefaultTargets } from "@/app/actions/kpi-targets";
 import type { KpiTarget } from "@/app/actions/kpi-targets";
-
-const DEPT_ORDER = [
-  "전사", "생산팀", "가공팀", "스킨팀", "재고팀", "품질팀",
-  "배송팀", "CS팀", "마케팅팀", "회계팀", "개발팀", "온라인팀",
-];
+import { DEPT_ORDER_WITH_ALL } from "@/lib/constants";
 
 export default function KpiTargetTable({
   targets,
@@ -33,7 +29,7 @@ export default function KpiTargetTable({
     grouped.set(t.dept, arr);
   }
 
-  const sortedDepts = DEPT_ORDER.filter((d) => grouped.has(d));
+  const sortedDepts = DEPT_ORDER_WITH_ALL.filter((d) => grouped.has(d));
 
   function rowKey(t: KpiTarget) {
     return `${t.dept}__${t.kpi_key}`;

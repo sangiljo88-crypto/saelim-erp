@@ -8,6 +8,7 @@ import { kpiData, departments as sampleDepts } from "@/lib/sampleData";
 import { getSession } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import { redirect } from "next/navigation";
+import { DEPT_ORDER, RAG_DOT, RAG_TEXT, RAG_COLOR } from "@/lib/constants";
 import { getKpiTargets } from "@/app/actions/kpi-targets";
 import type { KpiTarget } from "@/app/actions/kpi-targets";
 
@@ -67,10 +68,6 @@ function getLast6Months(): string[] {
   return result;
 }
 
-const RAG_DOT:   Record<string, string> = { green: "🟢", yellow: "🟡", red: "🔴" };
-const RAG_TEXT:  Record<string, string> = { green: "정상", yellow: "주의", red: "경고" };
-const RAG_COLOR: Record<string, string> = { green: "text-emerald-600", yellow: "text-amber-600", red: "text-red-600" };
-const DEPT_ORDER = ["생산팀","가공팀","스킨팀","재고팀","품질팀","배송팀","CS팀","마케팅팀","회계팀","온라인팀","개발팀"];
 
 function fmt억(v: number) {
   if (v >= 100_000_000) return `${(v / 100_000_000).toFixed(1)}억`;

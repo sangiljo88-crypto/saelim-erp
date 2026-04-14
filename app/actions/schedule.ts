@@ -5,8 +5,9 @@ import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { calcDeductedDays, type LeaveType } from "@/lib/types/leave";
 import { deductLeaveOnApproval, restoreLeaveOnReject } from "@/app/actions/leave";
+import { type ScheduleCategory } from "@/lib/constants";
 
-export type ScheduleCategory = "생산계획" | "품목계획" | "납품일정" | "회의" | "기타" | "일정";
+export type { ScheduleCategory };
 
 export interface CreateScheduleEventData {
   event_date: string;

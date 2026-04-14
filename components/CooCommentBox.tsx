@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { saveCooComment } from "@/app/actions/submit";
+import { RAG_DOT } from "@/lib/constants";
 
 interface Props {
   reportId: string;
@@ -21,7 +22,6 @@ const RAG_BADGE: Record<string, string> = {
   red:    "bg-red-100 text-red-700",
 };
 const RAG_LABEL: Record<string, string> = { green: "정상", yellow: "주의", red: "경고" };
-const RAG_DOT: Record<string, string> = { green: "🟢", yellow: "🟡", red: "🔴" };
 
 export default function CooCommentBox({
   reportId, dept, existingComment, managerName,

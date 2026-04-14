@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import ActionItems, { ActionItemRow } from "@/components/ActionItems";
 import AlertPanel from "@/components/AlertPanel";
+import { DEPT_ORDER } from "@/lib/constants";
 import CostApprovalSection from "@/components/CostApprovalSection";
 import HygieneCheckDetail from "@/components/HygieneCheckDetail";
 import CooCommentBox from "@/components/CooCommentBox";
@@ -18,8 +19,6 @@ function StatCard({ label, value, sub, color }: { label: string; value: string; 
     </div>
   );
 }
-
-const DEPT_ORDER = ["생산팀", "가공팀", "스킨팀", "재고팀", "품질팀", "배송팀", "CS팀", "마케팅팀", "회계팀", "온라인팀", "개발팀"];
 
 export default async function COOPage() {
   const session = await getSession();

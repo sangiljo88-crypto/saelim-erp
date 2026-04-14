@@ -4,6 +4,7 @@ import { createServerClient } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
+import { ROLE_LABEL } from "@/lib/constants";
 
 export async function submitProductionLog(formData: FormData) {
   const session = await getSession();
@@ -643,10 +644,7 @@ export async function updateFrozenInventoryRow(
   const canEdit = session.role === "coo" || session.role === "ceo" || session.role === "manager";
   if (!canEdit) throw new Error("재고 수정 권한이 없습니다. (팀장 이상)");
   const db = createServerClient();
-  const roleLabel: Record<string, string> = {
-    coo: "COO", ceo: "대표", manager: "팀장", worker: "직원",
-  };
-  const modified_by = `${session.name} (${roleLabel[session.role] ?? session.role})`;
+  const modified_by = `${session.name} (${ROLE_LABEL[session.role] ?? session.role})`;
   const { error } = await db.from("frozen_inventory").update({ ...updates, modified_by }).eq("id", id);
   if (error) throw new Error(error.message);
 

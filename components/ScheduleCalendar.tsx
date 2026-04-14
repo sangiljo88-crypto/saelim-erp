@@ -9,8 +9,8 @@ import {
   requestVacation,
   updateVacationRequest,
   approveVacation,
-  type ScheduleCategory,
 } from "@/app/actions/schedule";
+import { SCHEDULE_CATEGORIES, type ScheduleCategory } from "@/lib/constants";
 import {
   adjustLeaveBalance,
   initLeaveBalancesForYear,
@@ -119,14 +119,7 @@ function DatePickerInput({
 // ──────────────────────────────────────────────
 // Constants
 // ──────────────────────────────────────────────
-const CATEGORIES: ScheduleCategory[] = [
-  "생산계획",
-  "품목계획",
-  "납품일정",
-  "회의",
-  "기타",
-  "일정",
-];
+const CATEGORIES = SCHEDULE_CATEGORIES;
 
 const CATEGORY_STYLES: Record<string, string> = {
   생산계획: "bg-blue-100 text-blue-700",
