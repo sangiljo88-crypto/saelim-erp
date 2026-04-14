@@ -72,9 +72,19 @@ export default async function YieldPage() {
     <div className="min-h-screen bg-[#f0f2f5]">
       <AppHeader session={session} subtitle="수율 현황" />
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
-        <div className="mb-5">
-          <h1 className="text-lg font-bold text-gray-800">📊 수율 현황 대시보드</h1>
-          <p className="text-sm text-gray-500 mt-0.5">생산 수율 추이 · 품목별 분석 · 이슈 추적</p>
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h1 className="text-lg font-bold text-gray-800">📊 수율 현황 대시보드</h1>
+            <p className="text-sm text-gray-500 mt-0.5">생산 수율 추이 · 품목별 분석 · 이슈 추적</p>
+          </div>
+          {(session.role === "coo" || session.role === "ceo") && (
+            <a
+              href="/yield/cost-analysis"
+              className="text-xs bg-[#1F3864] text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-[#2a4a7f] transition-colors"
+            >
+              원가분석
+            </a>
+          )}
         </div>
         <YieldDashboard logs={logs ?? []} priceById={priceById} priceByName={priceByName} keywordPriceMap={keywordPriceMap} />
       </main>
