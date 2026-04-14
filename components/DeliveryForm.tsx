@@ -44,6 +44,7 @@ export default function DeliveryForm({ customers, onSuccess, onError, products }
     : FALLBACK_PRODUCT_OPTIONS;
   const [items, setItems] = useState<DeliveryItem[]>([{ ...EMPTY_ITEM }]);
   const [loading, setLoading] = useState(false);
+  const [showDispatchReminder, setShowDispatchReminder] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const [customerPriceMap, setCustomerPriceMap] = useState<Record<string, number>>({});
 
@@ -129,6 +130,7 @@ export default function DeliveryForm({ customers, onSuccess, onError, products }
       if (!result.success) {
         onError(result.error ?? "저장 중 오류가 발생했습니다.");
       } else {
+        setShowDispatchReminder(true);
         onSuccess();
       }
     } catch (err) {
@@ -298,6 +300,18 @@ export default function DeliveryForm({ customers, onSuccess, onError, products }
         className="w-full py-3.5 bg-[#1F3864] text-white font-semibold rounded-xl text-sm hover:bg-[#162c52] active:scale-95 disabled:opacity-50 transition-all">
         {loading ? "저장 중..." : "납품전표 제출"}
       </button>
+
+      {showDispatchReminder && (
+        <div className="bg-teal-50 border border-teal-200 rounded-xl px-4 py-3 flex items-center justify-between">
+          <span className="text-sm text-teal-700 font-medium">배차일지도 작성하셨나요?</span>
+          <a
+            href="/dispatch"
+            className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+          >
+            배차일지 작성
+          </a>
+        </div>
+      )}
     </form>
   );
 }

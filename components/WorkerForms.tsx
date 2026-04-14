@@ -95,6 +95,16 @@ export default function WorkerForms({ dept, todayProduction = false, todayHygien
         <span className="font-medium text-gray-600">{dept}</span> 입력 가능 항목
       </div>
 
+      {/* 배송팀: 배차일지 바로가기 */}
+      {dept === "배송팀" && (
+        <a
+          href="/dispatch"
+          className="flex items-center justify-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-3 text-sm font-semibold text-teal-700 hover:bg-teal-100 transition-colors"
+        >
+          🚚 배차일지 작성하기
+        </a>
+      )}
+
       {/* 탭 — 부서별 필터 (모바일 터치 최적화) */}
       <div
         className="bg-white rounded-xl p-1.5 border border-gray-200"
