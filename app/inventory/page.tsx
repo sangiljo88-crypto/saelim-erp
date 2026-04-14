@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { createServerClient } from "@/lib/supabase";
 import FrozenInventoryRowEditor from "@/components/FrozenInventoryRowEditor";
+import { getExpiryAlerts } from "@/app/actions/expiry";
 
 type FrozenRow = {
   id: string;
@@ -51,6 +52,17 @@ export default async function InventoryPage() {
     // 테이블 미존재 시 무시
   }
 
+  // 유통기한 임박 재고 조회
+  let expiryItems: {
+    id: string; product_name: string; section: string; expiry_date: string;
+    days_left: number; current_stock: number; unit: string;
+  }[] = [];
+  try {
+    expiryItems = await getExpiryAlerts(30);
+  } catch {
+    // 테이블 미존재 시 무시
+  }
+
   const sections = Array.from(new Set(rows.map((r) => r.section)));
   const totalCurrent = rows.reduce((s, r) => s + (r.current_stock ?? 0), 0);
   const lowCount = rows.filter((r) => (r.current_stock ?? 0) < 50 && (r.current_stock ?? 0) > 0).length;
@@ -78,6 +90,62 @@ export default async function InventoryPage() {
             <a href={session.role === "ceo" ? "/dashboard" : "/coo"} className="text-xs text-[#1F3864] hover:underline">← 대시보드</a>
           </div>
         </div>
+
+        {/* 유통기한 임박 섹션 */}
+        {expiryItems.length > 0 && (
+          <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">
+            <div className="bg-orange-50 px-4 py-2.5 text-sm font-bold text-orange-800 flex items-center gap-2 border-b border-orange-200">
+              <span>⏰</span> 유통기한 임박
+              <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold ml-1">
+                {expiryItems.length}건
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-orange-100 bg-orange-50/50">
+                    <th className="text-left px-3 py-2 text-gray-500 font-medium">품목</th>
+                    <th className="text-left px-3 py-2 text-gray-500 font-medium">위치</th>
+                    <th className="text-center px-3 py-2 text-gray-500 font-medium">유통기한</th>
+                    <th className="text-center px-3 py-2 text-gray-500 font-medium">남은일수</th>
+                    <th className="text-right px-3 py-2 text-gray-500 font-medium">재고량</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expiryItems.map((item) => {
+                    const urgencyColor =
+                      item.days_left <= 7
+                        ? "bg-red-50 text-red-700"
+                        : item.days_left <= 14
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-yellow-50 text-yellow-700";
+                    const badgeColor =
+                      item.days_left <= 7
+                        ? "bg-red-100 text-red-700"
+                        : item.days_left <= 14
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-yellow-100 text-yellow-700";
+                    return (
+                      <tr key={item.id} className={`border-b border-orange-100 last:border-0 ${urgencyColor}`}>
+                        <td className="px-3 py-2 font-medium text-gray-800">{item.product_name}</td>
+                        <td className="px-3 py-2 text-gray-600">{item.section}</td>
+                        <td className="px-3 py-2 text-center text-gray-600">{item.expiry_date}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${badgeColor}`}>
+                            {item.days_left}일
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold text-gray-700">
+                          {item.current_stock.toLocaleString()} {item.unit}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {rows.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">

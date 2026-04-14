@@ -10,6 +10,7 @@ import CooCommentBox from "@/components/CooCommentBox";
 import { createServerClient } from "@/lib/supabase";
 import { alerts } from "@/lib/sampleData";
 import { getProducts } from "@/app/actions/products";
+import { getExpiryAlerts } from "@/app/actions/expiry";
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
@@ -109,6 +110,15 @@ export default async function COOPage() {
     id: a.id as string, title: a.title, dept: a.dept,
     deadline: a.deadline, status: a.status as ActionItemRow["status"],
   }));
+
+  // 유통기한 임박 재고 조회
+  let expiryAlertCount = 0;
+  try {
+    const expiryAlerts = await getExpiryAlerts(30);
+    expiryAlertCount = expiryAlerts.length;
+  } catch {
+    // 테이블 미존재 시 무시
+  }
 
   // 품목별 안전재고 조회
   const allProducts = await getProducts();
@@ -227,6 +237,19 @@ export default async function COOPage() {
           >
             <span>📋</span> 재고실사
           </a>
+          <a
+            href="/inventory"
+            className={`flex items-center gap-2 bg-white rounded-xl border px-4 py-2.5 hover:bg-orange-50 transition-colors text-sm font-medium ${
+              expiryAlertCount > 0 ? "border-orange-300 text-orange-700" : "border-[#1F3864]/20 text-[#1F3864]"
+            }`}
+          >
+            <span>⏰</span> 유통기한
+            {expiryAlertCount > 0 && (
+              <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold">
+                {expiryAlertCount}
+              </span>
+            )}
+          </a>
         </div>
 
         {/* 요약 카드 */}
@@ -251,6 +274,22 @@ export default async function COOPage() {
             color={lowStockCount > 0 ? "text-amber-600" : "text-emerald-600"}
           />
         </div>
+
+        {/* 유통기한 경고 */}
+        {expiryAlertCount > 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-center gap-3">
+            <span className="text-2xl">⏰</span>
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-orange-800">
+                유통기한 임박 품목 {expiryAlertCount}건
+              </div>
+              <div className="text-xs text-orange-600 mt-0.5">
+                30일 이내 유통기한이 도래하는 재고가 있습니다.{" "}
+                <a href="/inventory" className="underline font-medium">재고 현황에서 확인</a>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ─── 오늘의 운영 현황 ────────────────────────────────── */}
         <section>

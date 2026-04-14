@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
 import { ROLE_LABEL } from "@/lib/constants";
+import { getShelfLifeByProductName } from "@/app/actions/expiry";
 
 // ── 냉동·냉장·컨테이너 재고 ──────────────────────────────────
 export async function saveFrozenInventory(
@@ -20,8 +21,28 @@ export async function saveFrozenInventory(
   const canEdit = session.role === "coo" || session.role === "ceo" || session.role === "manager";
   if (!canEdit) throw new Error("재고 저장 권한이 없습니다. (팀장 이상)");
   const db = createServerClient();
-  const rows = items.map((item) => ({ inventory_date: inventoryDate, ...item }));
-  const { error } = await db.from("frozen_inventory").upsert(rows, {
+
+  // 유통기한 자동 계산: 각 아이템에 대해 product_shelf_life 조회
+  const rowsWithExpiry = await Promise.all(
+    items.map(async (item) => {
+      const baseRow: Record<string, unknown> = { inventory_date: inventoryDate, ...item };
+      try {
+        const shelfLifeDays = await getShelfLifeByProductName(item.product_name);
+        if (shelfLifeDays) {
+          const today = new Date();
+          const expiryDate = new Date(today);
+          expiryDate.setDate(expiryDate.getDate() + shelfLifeDays);
+          baseRow.production_date = today.toISOString().split("T")[0];
+          baseRow.expiry_date = expiryDate.toISOString().split("T")[0];
+        }
+      } catch {
+        // 유통기한 조회 실패 시 무시
+      }
+      return baseRow;
+    })
+  );
+
+  const { error } = await db.from("frozen_inventory").upsert(rowsWithExpiry, {
     onConflict: "inventory_date,section,product_name",
   });
   if (error) throw new Error(error.message);

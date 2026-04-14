@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { upsertProduct, deleteProduct, bulkUpsertProducts } from "@/app/actions/products";
 import type { Product, BulkProductRow } from "@/app/actions/products";
+import { upsertShelfLife } from "@/app/actions/expiry";
 
 const CATEGORIES = ["전체", "원물", "가공품", "포장재", "부자재"] as const;
 const STORAGE_TYPES = ["냉동", "냉장", "상온"];
@@ -24,16 +25,25 @@ const EMPTY_PRODUCT: Omit<Product, "id"> = {
   safety_stock: 100,
 };
 
-interface Props {
-  initialProducts: Product[];
+export interface ShelfLifeEntry {
+  product_code: string;
+  product_name: string;
+  shelf_life_days: number;
+  storage_condition: string | null;
 }
 
-type EditRow = Omit<Product, "id"> & { id?: string };
+interface Props {
+  initialProducts: Product[];
+  shelfLifeMap?: Record<string, number>;
+}
 
-type SortKey = "code" | "name" | "category" | "subcategory" | "unit" | "purchase_price" | "sale_price" | "storage_type" | "storage_area" | "safety_stock";
+type EditRow = Omit<Product, "id"> & { id?: string; shelf_life_days?: number };
+
+type SortKey = "code" | "name" | "category" | "subcategory" | "unit" | "purchase_price" | "sale_price" | "storage_type" | "storage_area" | "safety_stock" | "shelf_life_days";
 type SortDir = "asc" | "desc";
 
-export default function ProductMasterSection({ initialProducts }: Props) {
+export default function ProductMasterSection({ initialProducts, shelfLifeMap = {} }: Props) {
+  const [shelfLifeLocal, setShelfLifeLocal] = useState<Record<string, number>>(shelfLifeMap);
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [activeCategory, setActiveCategory] = useState<string>("전체");
   const [search, setSearch] = useState("");
@@ -70,8 +80,15 @@ export default function ProductMasterSection({ initialProducts }: Props) {
       return catOk && searchOk;
     })
     .sort((a, b) => {
-      const av = a[sortKey] ?? "";
-      const bv = b[sortKey] ?? "";
+      let av: string | number | boolean | null;
+      let bv: string | number | boolean | null;
+      if (sortKey === "shelf_life_days") {
+        av = shelfLifeLocal[a.code] ?? 0;
+        bv = shelfLifeLocal[b.code] ?? 0;
+      } else {
+        av = a[sortKey] ?? "";
+        bv = b[sortKey] ?? "";
+      }
       let cmp = 0;
       if (typeof av === "number" && typeof bv === "number") {
         cmp = av - bv;
@@ -90,7 +107,7 @@ export default function ProductMasterSection({ initialProducts }: Props) {
   function startEdit(product: Product) {
     setIsAddingNew(false);
     setEditingId(product.id);
-    setEditData({ ...product });
+    setEditData({ ...product, shelf_life_days: shelfLifeLocal[product.code] ?? undefined });
   }
 
   function cancelEdit() {
@@ -111,6 +128,17 @@ export default function ProductMasterSection({ initialProducts }: Props) {
       if (!result.success) {
         showMsg("error", result.error ?? "저장 실패");
       } else {
+        // 유통기한 저장
+        if (editData.shelf_life_days != null && editData.shelf_life_days > 0 && editData.code) {
+          await upsertShelfLife(
+            editData.code,
+            editData.name,
+            editData.shelf_life_days,
+            editData.storage_type ?? "냉동"
+          );
+          setShelfLifeLocal((prev) => ({ ...prev, [editData.code]: editData.shelf_life_days! }));
+        }
+
         if (isAddingNew) {
           const tempId = `new-${Date.now()}`;
           const newProduct: Product = { id: tempId, ...editData, is_active: true };
@@ -300,6 +328,7 @@ export default function ProductMasterSection({ initialProducts }: Props) {
                     { key: "storage_type",   label: "보관방법",  align: "center", w: "w-20" },
                     { key: "storage_area",   label: "보관위치",  align: "left",   w: "w-28" },
                     { key: "safety_stock",  label: "안전재고",  align: "right",  w: "w-20" },
+                    { key: "shelf_life_days", label: "유통기한(일)", align: "right", w: "w-20" },
                   ] as { key: SortKey; label: string; align: string; w: string }[]
                 ).map(({ key, label, align, w }) => {
                   const active = sortKey === key;
@@ -386,6 +415,9 @@ export default function ProductMasterSection({ initialProducts }: Props) {
                       </td>
                       <td className="px-3 py-2.5 text-xs text-gray-500">{product.storage_area ?? "-"}</td>
                       <td className="px-3 py-2.5 text-right text-xs text-gray-700">{product.safety_stock}</td>
+                      <td className="px-3 py-2.5 text-right text-xs text-gray-700">
+                        {shelfLifeLocal[product.code] ? `${shelfLifeLocal[product.code]}일` : "-"}
+                      </td>
                       <td className="px-3 py-2.5 text-center">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           product.is_active ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"
@@ -620,6 +652,15 @@ function EditRowCells({ data, setField, onSave, onCancel, saving }: EditRowCells
           value={data.safety_stock || ""}
           onChange={(e) => setField("safety_stock", Number(e.target.value))}
           placeholder="100"
+          className="w-full rounded-lg border border-[#1F3864]/30 px-2 py-1.5 text-xs text-right focus:border-[#1F3864] outline-none"
+        />
+      </td>
+      <td className="px-2 py-2">
+        <input
+          type="number"
+          value={data.shelf_life_days || ""}
+          onChange={(e) => setField("shelf_life_days", Number(e.target.value))}
+          placeholder="180"
           className="w-full rounded-lg border border-[#1F3864]/30 px-2 py-1.5 text-xs text-right focus:border-[#1F3864] outline-none"
         />
       </td>
