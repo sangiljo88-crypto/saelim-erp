@@ -27,7 +27,7 @@ export type ScheduleCategory = typeof SCHEDULE_CATEGORIES[number];
 // ── 임계값 (알림/상태 판정 기준) ──
 export const THRESHOLDS = {
   yield: { good: 92, warning: 88 },           // % - 수율
-  lowStock: 100,                               // 기본 안전재고
+  lowStock: 100,                               // 기본값 (품목별 설정 우선)
   utilityRiskRed: 1.30,                        // 유틸리티 비용 전월 대비
   utilityRiskYellow: 1.15,
   claimsAlertMin: 3,                           // 클레임 경고 최소 건수

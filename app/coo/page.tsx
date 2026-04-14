@@ -3,12 +3,13 @@ import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import ActionItems, { ActionItemRow } from "@/components/ActionItems";
 import AlertPanel from "@/components/AlertPanel";
-import { DEPT_ORDER } from "@/lib/constants";
+import { DEPT_ORDER, THRESHOLDS } from "@/lib/constants";
 import CostApprovalSection from "@/components/CostApprovalSection";
 import HygieneCheckDetail from "@/components/HygieneCheckDetail";
 import CooCommentBox from "@/components/CooCommentBox";
 import { createServerClient } from "@/lib/supabase";
 import { alerts } from "@/lib/sampleData";
+import { getProducts } from "@/app/actions/products";
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
@@ -109,13 +110,21 @@ export default async function COOPage() {
     deadline: a.deadline, status: a.status as ActionItemRow["status"],
   }));
 
+  // 품목별 안전재고 조회
+  const allProducts = await getProducts();
+  const safetyStockMap = new Map<string, number>();
+  for (const p of allProducts) {
+    safetyStockMap.set(p.name, p.safety_stock);
+  }
+
   const delayedActions = actionItems.filter((a) => a.status === "지연").length;
   const pendingApprovals = (costApprovals ?? []).length;
   const reportSubmitted = latestByDept.size;
   const pendingReviews = [...latestByDept.values()].filter((r) => r.status === "submitted").length;
   const lowStockCount = inventoryRows.filter((r) => {
     const curr = r.prev_stock + r.incoming_qty - r.outgoing_qty;
-    return curr < 100;
+    const threshold = safetyStockMap.get(r.product_name) ?? THRESHOLDS.lowStock;
+    return curr < threshold;
   }).length;
 
   // 유틸리티 리스크 계산 (이번달 vs 직전 3개월 평균)

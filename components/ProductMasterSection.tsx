@@ -21,6 +21,7 @@ const EMPTY_PRODUCT: Omit<Product, "id"> = {
   storage_area: null,
   is_active: true,
   note: null,
+  safety_stock: 100,
 };
 
 interface Props {
@@ -29,7 +30,7 @@ interface Props {
 
 type EditRow = Omit<Product, "id"> & { id?: string };
 
-type SortKey = "code" | "name" | "category" | "subcategory" | "unit" | "purchase_price" | "sale_price" | "storage_type" | "storage_area";
+type SortKey = "code" | "name" | "category" | "subcategory" | "unit" | "purchase_price" | "sale_price" | "storage_type" | "storage_area" | "safety_stock";
 type SortDir = "asc" | "desc";
 
 export default function ProductMasterSection({ initialProducts }: Props) {
@@ -167,6 +168,7 @@ export default function ProductMasterSection({ initialProducts }: Props) {
       판매가: p.sale_price,
       보관방법: p.storage_type ?? "",
       보관위치: p.storage_area ?? "",
+      안전재고: p.safety_stock,
       비고: p.note ?? "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -297,6 +299,7 @@ export default function ProductMasterSection({ initialProducts }: Props) {
                     { key: "sale_price",     label: "판매가(원)",align: "right",  w: "w-24" },
                     { key: "storage_type",   label: "보관방법",  align: "center", w: "w-20" },
                     { key: "storage_area",   label: "보관위치",  align: "left",   w: "w-28" },
+                    { key: "safety_stock",  label: "안전재고",  align: "right",  w: "w-20" },
                   ] as { key: SortKey; label: string; align: string; w: string }[]
                 ).map(({ key, label, align, w }) => {
                   const active = sortKey === key;
@@ -334,7 +337,7 @@ export default function ProductMasterSection({ initialProducts }: Props) {
 
               {filtered.length === 0 && !isAddingNew ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-12 text-gray-400 text-sm">
+                  <td colSpan={12} className="text-center py-12 text-gray-400 text-sm">
                     검색 결과가 없습니다.
                   </td>
                 </tr>
@@ -382,6 +385,7 @@ export default function ProductMasterSection({ initialProducts }: Props) {
                         }`}>{product.storage_type ?? "-"}</span>
                       </td>
                       <td className="px-3 py-2.5 text-xs text-gray-500">{product.storage_area ?? "-"}</td>
+                      <td className="px-3 py-2.5 text-right text-xs text-gray-700">{product.safety_stock}</td>
                       <td className="px-3 py-2.5 text-center">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           product.is_active ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"
@@ -608,6 +612,15 @@ function EditRowCells({ data, setField, onSave, onCancel, saving }: EditRowCells
           onChange={(e) => setField("storage_area", e.target.value || null)}
           placeholder="보관위치"
           className="w-full rounded-lg border border-[#1F3864]/30 px-2 py-1.5 text-xs focus:border-[#1F3864] outline-none"
+        />
+      </td>
+      <td className="px-2 py-2">
+        <input
+          type="number"
+          value={data.safety_stock || ""}
+          onChange={(e) => setField("safety_stock", Number(e.target.value))}
+          placeholder="100"
+          className="w-full rounded-lg border border-[#1F3864]/30 px-2 py-1.5 text-xs text-right focus:border-[#1F3864] outline-none"
         />
       </td>
       <td className="px-2 py-2 text-center">
