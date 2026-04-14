@@ -1,7 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { createDispatchLog, completeDispatchLog } from "@/app/actions/dispatch";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { createDispatchLog, completeDispatchLog, upsertVehicle } from "@/app/actions/dispatch";
+
+// 어디 클릭해도 시간 팝업 오픈
+function TimePickerInput({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <div
+      className={`border border-gray-300 rounded-xl overflow-hidden cursor-pointer hover:border-[#1F3864] transition-colors focus-within:border-[#1F3864] focus-within:ring-2 focus-within:ring-[#1F3864]/20 ${className ?? ""}`}
+      onClick={() => { ref.current?.focus(); ref.current?.showPicker?.(); }}
+    >
+      <input
+        ref={ref}
+        type="time"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full h-12 px-4 text-base focus:outline-none bg-transparent cursor-pointer"
+      />
+    </div>
+  );
+}
 
 interface Vehicle {
   id: string;
@@ -34,9 +54,17 @@ interface Props {
 type Mode = "depart" | "return";
 
 export default function DispatchForm({ vehicles, myDepartedLogs }: Props) {
+  const router = useRouter();
   const [mode, setMode] = useState<Mode>(myDepartedLogs.length > 0 ? "return" : "depart");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  // 차량 빠른 등록
+  const [showAddVehicle, setShowAddVehicle] = useState(false);
+  const [newVehicleName, setNewVehicleName] = useState("");
+  const [newVehicleNumber, setNewVehicleNumber] = useState("");
+  const [newVehicleType, setNewVehicleType] = useState("냉동");
+  const [addingVehicle, setAddingVehicle] = useState(false);
 
   // 출발 등록 상태
   const [selectedVehicle, setSelectedVehicle] = useState("");
@@ -220,6 +248,102 @@ export default function DispatchForm({ vehicles, myDepartedLogs }: Props) {
                 </option>
               ))}
             </select>
+
+            {vehicles.length === 0 && !showAddVehicle && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between">
+                <span className="text-sm text-amber-700">등록된 차량이 없습니다.</span>
+                <button
+                  type="button"
+                  onClick={() => setShowAddVehicle(true)}
+                  className="text-xs bg-amber-500 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-amber-600"
+                >
+                  + 차량 등록
+                </button>
+              </div>
+            )}
+
+            {!showAddVehicle && vehicles.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAddVehicle(true)}
+                className="text-xs text-[#1F3864] hover:underline self-start"
+              >
+                + 새 차량 등록
+              </button>
+            )}
+
+            {showAddVehicle && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col gap-3">
+                <div className="text-sm font-semibold text-[#1F3864]">🚛 차량 빠른 등록</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    value={newVehicleName}
+                    onChange={(e) => setNewVehicleName(e.target.value)}
+                    placeholder="차량명 (예: 1톤냉동)"
+                    className="h-10 text-sm rounded-lg border border-gray-300 px-3 focus:border-[#1F3864] outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={newVehicleNumber}
+                    onChange={(e) => setNewVehicleNumber(e.target.value)}
+                    placeholder="차량번호 (예: 12가3456)"
+                    className="h-10 text-sm rounded-lg border border-gray-300 px-3 focus:border-[#1F3864] outline-none"
+                  />
+                </div>
+                <select
+                  value={newVehicleType}
+                  onChange={(e) => setNewVehicleType(e.target.value)}
+                  className="h-10 text-sm rounded-lg border border-gray-300 px-3 focus:border-[#1F3864] outline-none bg-white"
+                >
+                  <option value="냉동">냉동</option>
+                  <option value="냉장">냉장</option>
+                  <option value="상온">상온</option>
+                  <option value="윙바디">윙바디</option>
+                </select>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={addingVehicle || !newVehicleName.trim() || !newVehicleNumber.trim()}
+                    onClick={async () => {
+                      setAddingVehicle(true);
+                      try {
+                        const result = await upsertVehicle({
+                          vehicle_name: newVehicleName.trim(),
+                          vehicle_number: newVehicleNumber.trim(),
+                          vehicle_type: newVehicleType,
+                          fuel_type: "경유",
+                          fuel_efficiency: 8,
+                        });
+                        if (result.success) {
+                          setMsg({ type: "ok", text: "차량이 등록되었습니다." });
+                          setShowAddVehicle(false);
+                          setNewVehicleName("");
+                          setNewVehicleNumber("");
+                          router.refresh();
+                        } else {
+                          setMsg({ type: "err", text: result.error ?? "등록 실패" });
+                        }
+                      } catch (e) {
+                        setMsg({ type: "err", text: (e as Error).message });
+                      } finally {
+                        setAddingVehicle(false);
+                      }
+                    }}
+                    className="flex-1 h-10 bg-[#1F3864] text-white text-sm font-semibold rounded-lg hover:bg-[#2a4a7f] disabled:opacity-50"
+                  >
+                    {addingVehicle ? "등록 중..." : "등록"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddVehicle(false)}
+                    className="h-10 px-4 text-sm text-gray-600 rounded-lg hover:bg-gray-100"
+                  >
+                    취소
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 출발 키로수 */}
@@ -261,12 +385,7 @@ export default function DispatchForm({ vehicles, myDepartedLogs }: Props) {
           {/* 출발시간 */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-700">출발시간</label>
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              className="h-12 text-base rounded-xl border border-gray-300 px-4 focus:border-[#1F3864] outline-none"
-            />
+            <TimePickerInput value={startTime} onChange={setStartTime} />
           </div>
 
           {/* 방문처 */}
@@ -384,12 +503,7 @@ export default function DispatchForm({ vehicles, myDepartedLogs }: Props) {
                   {/* 도착시간 */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-medium text-gray-600">도착시간</label>
-                    <input
-                      type="time"
-                      value={state.end_time}
-                      onChange={(e) => updateReturn(log.id, "end_time", e.target.value)}
-                      className="h-12 text-base rounded-xl border border-gray-300 px-4 focus:border-[#1F3864] outline-none"
-                    />
+                    <TimePickerInput value={state.end_time} onChange={(v) => updateReturn(log.id, "end_time", v)} />
                   </div>
 
                   {/* 주유 정보 (같은 줄에 2개) */}
