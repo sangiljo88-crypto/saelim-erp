@@ -5,9 +5,9 @@ import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { calcDeductedDays, type LeaveType } from "@/lib/types/leave";
 import { deductLeaveOnApproval, restoreLeaveOnReject } from "@/app/actions/leave";
-import { type ScheduleCategory } from "@/lib/constants";
+import { SCHEDULE_CATEGORIES } from "@/lib/constants";
 
-export type { ScheduleCategory };
+export type ScheduleCategory = typeof SCHEDULE_CATEGORIES[number];
 
 export interface CreateScheduleEventData {
   event_date: string;
