@@ -114,6 +114,23 @@ export async function submitCostApprovalRequest(formData: FormData) {
   });
 
   if (error) return { success: false, error: error.message };
+
+  // 알림: COO에게 비용 승인 요청 알림
+  try {
+    const { sendNotification } = await import("@/lib/notifications");
+    const title = formData.get("title") as string;
+    const amount = Number(formData.get("amount")) || 0;
+    await sendNotification({
+      recipientId: "coo",
+      recipientName: "COO",
+      title: "비용 승인 요청",
+      message: `비용 승인 요청: ${title} (${amount.toLocaleString()}원)`,
+      type: "warning",
+      category: "approval",
+      link: "/approvals",
+    });
+  } catch { /* 알림 실패가 메인 작업을 중단시키면 안 됨 */ }
+
   revalidatePath("/approvals");
   revalidatePath("/coo");
   return { success: true };

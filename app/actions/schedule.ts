@@ -198,6 +198,20 @@ export async function requestVacation(data: RequestVacationData) {
       throw new Error(error.message);
     }
   }
+  // 알림: COO에게 휴가 신청 알림
+  try {
+    const { sendNotification } = await import("@/lib/notifications");
+    await sendNotification({
+      recipientId: "coo",
+      recipientName: "COO",
+      title: "휴가 신청",
+      message: `휴가 신청: ${session.name}`,
+      type: "info",
+      category: "leave",
+      link: "/schedule",
+    });
+  } catch { /* 알림 실패가 메인 작업을 중단시키면 안 됨 */ }
+
   revalidatePath("/schedule");
   return { success: true };
 }
@@ -399,6 +413,21 @@ export async function approveVacation(
       year, deductedDays, approverSession
     );
   }
+
+  // 알림: 신청자에게 승인/반려 결과 알림
+  try {
+    const { sendNotification } = await import("@/lib/notifications");
+    const isApproved = status === "approved";
+    await sendNotification({
+      recipientId: vac.requester_id as string,
+      recipientName: vac.requester_name as string,
+      title: isApproved ? "휴가 승인" : "휴가 반려",
+      message: isApproved ? "휴가가 승인되었습니다" : `휴가가 반려되었습니다${reason ? `: ${reason}` : ""}`,
+      type: isApproved ? "success" : "warning",
+      category: "leave",
+      link: "/schedule",
+    });
+  } catch { /* 알림 실패가 메인 작업을 중단시키면 안 됨 */ }
 
   revalidatePath("/schedule");
   return { success: true };

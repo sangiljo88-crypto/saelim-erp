@@ -79,6 +79,22 @@ export async function submitClaim(formData: FormData, productNames: string[]) {
   });
 
   if (error) throw new Error(error.message);
+
+  // 알림: COO에게 새 클레임 접수 알림
+  try {
+    const { sendNotification } = await import("@/lib/notifications");
+    const productName = productNames.join(", ");
+    await sendNotification({
+      recipientId: "coo",
+      recipientName: "COO",
+      title: "새 클레임 접수",
+      message: `새 클레임 접수: ${productName}`,
+      type: "urgent",
+      category: "claim",
+      link: "/claims",
+    });
+  } catch { /* 알림 실패가 메인 작업을 중단시키면 안 됨 */ }
+
   return { success: true };
 }
 

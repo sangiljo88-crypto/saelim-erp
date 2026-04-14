@@ -1,6 +1,7 @@
 import { logout } from "@/app/actions/auth";
 import { SessionPayload } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
+import NotificationBell from "@/components/NotificationBell";
 
 const roleLabel: Record<string, string> = {
   ceo: "대표이사",
@@ -45,6 +46,7 @@ export default async function AppHeader({ session, subtitle }: { session: Sessio
             <span className="text-sm text-blue-100">{session.name}</span>
             {session.dept && <span className="text-xs text-blue-300">· {session.dept}</span>}
           </div>
+          <NotificationBell userId={session.id} />
           <form action={logout}>
             <button
               type="submit"
