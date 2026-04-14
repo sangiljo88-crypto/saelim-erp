@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { submitDelivery } from "@/app/actions/submit";
+import { getCustomerPriceMap } from "@/app/actions/pricing";
 
 interface Customer {
   id: string;
@@ -44,13 +45,54 @@ export default function DeliveryForm({ customers, onSuccess, onError, products }
   const [items, setItems] = useState<DeliveryItem[]>([{ ...EMPTY_ITEM }]);
   const [loading, setLoading] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const [customerPriceMap, setCustomerPriceMap] = useState<Record<string, number>>({});
 
   const totalAmount = items.reduce((s, it) => s + it.amount, 0);
+
+  // 거래처 변경 시 단가 맵 로드
+  const loadCustomerPrices = useCallback(async (customerId: string) => {
+    if (!customerId) {
+      setCustomerPriceMap({});
+      return;
+    }
+    try {
+      const map = await getCustomerPriceMap(customerId);
+      setCustomerPriceMap(map);
+      // 기존 아이템에 단가 자동 적용
+      if (Object.keys(map).length > 0) {
+        setItems((prev) =>
+          prev.map((item) => {
+            if (item.product && map[item.product] !== undefined) {
+              const newPrice = map[item.product];
+              return { ...item, unit_price: newPrice, amount: item.qty_kg * newPrice };
+            }
+            return item;
+          })
+        );
+      }
+    } catch {
+      setCustomerPriceMap({});
+    }
+  }, []);
 
   function updateItem(idx: number, field: keyof DeliveryItem, value: string | number) {
     setItems((prev) => {
       const next = [...prev];
       const item = { ...next[idx], [field]: value };
+      // 품목 변경 시 거래처별 단가 자동 적용
+      if (field === "product" && typeof value === "string" && value) {
+        const customerPrice = customerPriceMap[value];
+        if (customerPrice !== undefined) {
+          item.unit_price = customerPrice;
+        } else {
+          // 거래처 단가 없으면 기본 판매가 적용
+          const prod = products?.find((p) => p.name === value);
+          if (prod && prod.sale_price > 0) {
+            item.unit_price = prod.sale_price;
+          }
+        }
+        item.amount = item.qty_kg * item.unit_price;
+      }
       // 자동 금액 계산
       if (field === "qty_kg" || field === "unit_price") {
         item.amount = item.qty_kg * item.unit_price;
@@ -117,6 +159,12 @@ export default function DeliveryForm({ customers, onSuccess, onError, products }
               const selected = customers.find((c) => c.name === e.target.value);
               const hiddenInput = formRef.current?.querySelector<HTMLInputElement>('input[name="customer_id"]');
               if (hiddenInput) hiddenInput.value = selected?.id ?? "";
+              // 거래처별 단가 로드
+              if (selected?.id) {
+                loadCustomerPrices(selected.id);
+              } else {
+                setCustomerPriceMap({});
+              }
             }}
             className="rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#1F3864] outline-none bg-white">
             <option value="">거래처를 선택하세요</option>

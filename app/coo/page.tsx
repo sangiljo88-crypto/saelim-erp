@@ -215,6 +215,12 @@ export default async function COOPage() {
           >
             <span>📝</span> 감사 로그
           </a>
+          <a
+            href="/settings/pricing"
+            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
+          >
+            <span>💰</span> 거래처 단가
+          </a>
         </div>
 
         {/* 요약 카드 */}
