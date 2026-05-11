@@ -196,6 +196,7 @@ export default async function DashboardPage({
   ]);
 
   // ── KPI 목표치 (DB 우선, 없으면 하드코딩 폴백) ─────────────
+  // Note: getKpiTargets는 내부에서 별도 DB 연결을 만들어서 위 Promise.all과 자연 병렬
   const dbKpiTargets: KpiTarget[] = await getKpiTargets(new Date().getFullYear(), "전사");
   const kpiTargetMap: Record<string, number> = {};
   for (const t of dbKpiTargets) {
