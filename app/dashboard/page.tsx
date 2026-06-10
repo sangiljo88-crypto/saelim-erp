@@ -11,6 +11,11 @@ import { redirect } from "next/navigation";
 import { DEPT_ORDER, RAG_DOT, RAG_TEXT, RAG_COLOR } from "@/lib/constants";
 import { getKpiTargets } from "@/app/actions/kpi-targets";
 import type { KpiTarget } from "@/app/actions/kpi-targets";
+import SectionHeader from "@/components/ui/SectionHeader";
+import StatCard from "@/components/ui/StatCard";
+import StatusBadge from "@/components/ui/StatusBadge";
+import EmptyState from "@/components/ui/EmptyState";
+import Card from "@/components/ui/Card";
 
 // ── 날짜 유틸 ─────────────────────────────────────────────────
 function getDateRange(period: string, from?: string, to?: string) {
@@ -342,21 +347,15 @@ export default async function DashboardPage({
             <span className="bg-[#1F3864] text-white text-xs font-semibold px-3 py-1 rounded-full">{label}</span>
             <span className="text-xs text-gray-400">{start === end ? start : `${start} ~ ${end}`}</span>
             {fromDB ? (
-              <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">
-                ● 실데이터 연동
-              </span>
+              <StatusBadge tone="green">● 실데이터 연동</StatusBadge>
             ) : (
-              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
-                ⚠ 납품전표 입력 시 자동 반영
-              </span>
+              <StatusBadge tone="yellow">⚠ 납품전표 입력 시 자동 반영</StatusBadge>
             )}
             {!isSingleMonth && months.length > 1 && (
               <span className="text-xs text-gray-400">· 매출 {months.length}개월 합계</span>
             )}
             {todayProdCount !== null && todayProdCount > 0 && (
-              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
-                오늘 생산일지 {todayProdCount}건
-              </span>
+              <StatusBadge tone="blue">오늘 생산일지 {todayProdCount}건</StatusBadge>
             )}
           </div>
         </div>
@@ -473,24 +472,21 @@ export default async function DashboardPage({
 
         {/* ── KPI 카드 ── */}
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">핵심 지표</h2>
-              {session.role === "ceo" && (
+          <SectionHeader
+            title="핵심 지표"
+            badge={!fromDB ? "⚠️ 샘플 데이터 · 회계팀 KPI 입력 시 실제 수치로 대체됩니다" : undefined}
+            badgeColor="amber"
+            action={
+              session.role === "ceo" ? (
                 <a
                   href="/settings/kpi"
                   className="text-xs text-[#1F3864] hover:text-[#2a4a7f] hover:bg-blue-50 px-2 py-1 rounded-lg transition-colors"
                 >
                   ⚙️ 목표 설정
                 </a>
-              )}
-            </div>
-            {!fromDB && (
-              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-semibold animate-pulse">
-                ⚠️ 샘플 데이터 · 회계팀 KPI 입력 시 실제 수치로 대체됩니다
-              </span>
-            )}
-          </div>
+              ) : undefined
+            }
+          />
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <KPICard
               title={period === "today" ? "매출 (오늘)" : period === "week" ? "매출 (이번 주)" : months.length > 1 ? `매출 (${months.length}개월 합)` : "매출 (이번 달)"}
@@ -544,7 +540,7 @@ export default async function DashboardPage({
         </section>
 
         {/* 이번달 손익 현황 */}
-        <section className="bg-white rounded-xl border border-gray-200 p-5">
+        <Card className="flex flex-col">
           <div className="text-sm font-bold text-gray-700 mb-4">📊 {thisMonth.replace("-","년 ")}월 손익 현황</div>
           <div className="flex flex-col gap-2">
             {/* 매출 */}
@@ -602,58 +598,54 @@ export default async function DashboardPage({
               </div>
             )}
           </div>
-        </section>
+        </Card>
 
         {/* 기간 생산 요약 */}
         {prodLogCount > 0 && (
           <section className="grid grid-cols-3 gap-3">
-            {[
-              { label: `생산일지 (${label})`, value: `${prodLogCount}건`,               sub: "생산 기록", color: "text-[#1F3864]" },
-              { label: "완성품 생산량",        value: `${totalOutput.toLocaleString()}kg`, sub: "기간 합계", color: "text-gray-800" },
-              { label: "원료 투입량",          value: `${totalInput.toLocaleString()}kg`,  sub: "기간 합계", color: "text-gray-800" },
-            ].map((c) => (
-              <div key={c.label} className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="text-xs text-gray-500 mb-1">{c.label}</div>
-                <div className={`text-xl font-bold ${c.color}`}>{c.value}</div>
-                <div className="text-xs text-gray-400 mt-0.5">{c.sub}</div>
-              </div>
-            ))}
+            <StatCard label={`생산일지 (${label})`} value={`${prodLogCount}건`} sub="생산 기록" />
+            <StatCard label="완성품 생산량" value={`${totalOutput.toLocaleString()}kg`} sub="기간 합계" />
+            <StatCard label="원료 투입량" value={`${totalInput.toLocaleString()}kg`} sub="기간 합계" />
           </section>
         )}
 
         {/* 매출 추이 + 경고 알림 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
+          <Card className="lg:col-span-2">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-gray-700">📊 월별 매출 추이 (최근 6개월)</h2>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${hasChartData ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+              <StatusBadge tone={hasChartData ? "green" : "gray"}>
                 {hasChartData ? "● 납품전표 실데이터" : "납품전표 입력 시 자동 반영"}
-              </span>
+              </StatusBadge>
             </div>
             <RevenueChart data={revenueChartData} />
-          </div>
+          </Card>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-3">
+          <Card className="flex flex-col gap-3">
             <h2 className="text-sm font-semibold text-gray-700">🚨 경고 알림</h2>
             {dynamicAlerts.length > 0 ? (
               <AlertPanel alerts={dynamicAlerts} />
             ) : (
-              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700">
-                <span>✅</span>
-                <span>현재 주요 경고 없음</span>
-              </div>
+              <EmptyState icon="✅" message="현재 주요 경고 없음" hint="실데이터 기반 자동 감지" />
             )}
-          </div>
+          </Card>
         </div>
 
         {/* 부서별 현황 */}
         <section>
-          <div className="flex items-center gap-3 mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">부서별 현황</h2>
-            {redCount    > 0 && <span className="text-xs bg-red-100   text-red-700   px-2 py-0.5 rounded-full font-semibold">경고 {redCount}개</span>}
-            {yellowCount > 0 && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">주의 {yellowCount}개</span>}
-            <span className="text-xs text-gray-400 ml-auto">DB 보고: {latestByDept.size}개 부서</span>
-          </div>
+          <SectionHeader
+            title="부서별 현황"
+            badge={redCount > 0 ? `경고 ${redCount}개` : yellowCount > 0 ? `주의 ${yellowCount}개` : undefined}
+            badgeColor={redCount > 0 ? "red" : "amber"}
+            action={
+              <div className="flex items-center gap-2">
+                {redCount > 0 && yellowCount > 0 && (
+                  <StatusBadge tone="yellow">주의 {yellowCount}개</StatusBadge>
+                )}
+                <span className="text-xs text-gray-400">DB 보고: {latestByDept.size}개 부서</span>
+              </div>
+            }
+          />
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="grid grid-cols-[120px_80px_1fr_1fr] text-xs font-semibold text-white bg-[#1F3864] px-5 py-3 gap-4">
               <span>부서</span><span>상태</span><span>이번 주 이슈</span><span>COO 코멘트</span>
@@ -684,15 +676,15 @@ export default async function DashboardPage({
 
         {/* Action Items */}
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-              주요 Action Items
-              <span className="ml-2 text-gray-400 font-normal normal-case">({actionItems.length}건)</span>
-            </h2>
-            {delayedActions > 0 && (
-              <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">지연 {delayedActions}건</span>
-            )}
-          </div>
+          <SectionHeader
+            title="주요 Action Items"
+            badge={`${actionItems.length}건`}
+            action={
+              delayedActions > 0 ? (
+                <StatusBadge tone="red">지연 {delayedActions}건</StatusBadge>
+              ) : undefined
+            }
+          />
           <ActionItems items={actionItems} />
         </section>
 

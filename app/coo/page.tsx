@@ -12,16 +12,11 @@ import { alerts } from "@/lib/sampleData";
 import { getProducts } from "@/app/actions/products";
 import { getExpiryAlerts } from "@/app/actions/expiry";
 import { getOverdueSchedules, getSpareParts } from "@/app/actions/preventive-maintenance";
-
-function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
-  return (
-    <div className="rounded-xl border p-4 bg-white">
-      <div className="text-xs text-gray-500 mb-1">{label}</div>
-      <div className={`text-xl font-bold ${color}`}>{value}</div>
-      <div className="text-xs text-gray-400 mt-0.5">{sub}</div>
-    </div>
-  );
-}
+import SectionHeader from "@/components/ui/SectionHeader";
+import StatCard from "@/components/ui/StatCard";
+import StatusBadge from "@/components/ui/StatusBadge";
+import EmptyState from "@/components/ui/EmptyState";
+import Card from "@/components/ui/Card";
 
 export default async function COOPage() {
   const session = await getSession();
@@ -175,178 +170,51 @@ export default async function COOPage() {
             <h1 className="text-lg font-bold text-gray-800">운영 현황 총괄</h1>
             <p className="text-sm text-gray-500">전 부서 실시간 현황 · {thisMonth.replace("-", "년 ")}월 · DB 연동</p>
           </div>
-          <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full font-semibold">COO 전용</span>
+          <StatusBadge tone="blue">COO 전용</StatusBadge>
         </div>
 
-        {/* 바로가기 링크 */}
-        <div className="flex gap-3 flex-wrap">
-          <a
-            href="/briefings/new"
-            className="flex items-center gap-2 bg-[#1F3864] text-white rounded-xl border border-[#1F3864] px-4 py-2.5 hover:bg-[#2a4a7f] transition-colors text-sm font-medium"
-          >
-            <span>✏️</span> 브리핑 등록
-          </a>
-          <a
-            href="/products"
-            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
-          >
-            <span>📦</span> 품목 마스터
-          </a>
-          <a
-            href="/claims"
-            className="flex items-center gap-2 bg-white rounded-xl border border-red-200 px-4 py-2.5 hover:bg-red-50 transition-colors text-sm font-medium text-red-700"
-          >
-            <span>📋</span> 클레임 관리
-            {pendingClaimsCount ? (
-              <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold">
-                {pendingClaimsCount}
-              </span>
-            ) : null}
-          </a>
-          <a
-            href="/inventory"
-            className="flex items-center gap-2 bg-white rounded-xl border border-blue-200 px-4 py-2.5 hover:bg-blue-50 transition-colors text-sm font-medium text-blue-700"
-          >
-            <span>🏭</span> 창고 재고
-            {lowStockCount > 0 && (
-              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">
-                부족 {lowStockCount}
-              </span>
-            )}
-          </a>
-          <a
-            href="/maintenance"
-            className="flex items-center gap-2 bg-white rounded-xl border border-orange-200 px-4 py-2.5 hover:bg-orange-50 transition-colors text-sm font-medium text-orange-700"
-          >
-            <span>🔧</span> 설비 관리
-            {overdueMaintenanceCount > 0 && (
-              <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold">
-                지연 {overdueMaintenanceCount}
-              </span>
-            )}
-          </a>
-          <a
-            href="/maintenance/schedule"
-            className="flex items-center gap-2 bg-white rounded-xl border border-purple-200 px-4 py-2.5 hover:bg-purple-50 transition-colors text-sm font-medium text-purple-700"
-          >
-            <span>📅</span> 정비 스케줄
-            {lowSparePartsCount > 0 && (
-              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">
-                부품부족 {lowSparePartsCount}
-              </span>
-            )}
-          </a>
-          <a
-            href="/utility"
-            className="flex items-center gap-2 bg-white rounded-xl border border-yellow-200 px-4 py-2.5 hover:bg-yellow-50 transition-colors text-sm font-medium text-yellow-700"
-          >
-            <span>⚡</span> 유틸리티
-            {utilityRisk === "red"    && <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold">위험</span>}
-            {utilityRisk === "yellow" && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">주의</span>}
-          </a>
-          <a
-            href="/dispatch"
-            className="flex items-center gap-2 bg-white rounded-xl border border-teal-200 px-4 py-2.5 hover:bg-teal-50 transition-colors text-sm font-medium text-teal-700"
-          >
-            <span>🚚</span> 배차일지
-          </a>
-          <a
-            href="/dispatch/fuel"
-            className="flex items-center gap-2 bg-white rounded-xl border border-teal-200 px-4 py-2.5 hover:bg-teal-50 transition-colors text-sm font-medium text-teal-700"
-          >
-            <span>⛽</span> 유류비
-          </a>
-          <a
-            href="/lot"
-            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
-          >
-            <span>📦</span> LOT 추적
-          </a>
-          <a
-            href="/settings/kpi"
-            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
-          >
-            <span>⚙️</span> KPI 목표 설정
-          </a>
-          <a
-            href="/settings/audit"
-            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
-          >
-            <span>📝</span> 감사 로그
-          </a>
-          <a
-            href="/settings/pricing"
-            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
-          >
-            <span>💰</span> 거래처 단가
-          </a>
-          <a
-            href="/inventory/audit"
-            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
-          >
-            <span>📋</span> 재고실사
-          </a>
-          <a
-            href="/customers/profitability"
-            className="flex items-center gap-2 bg-white rounded-xl border border-emerald-200 px-4 py-2.5 hover:bg-emerald-50 transition-colors text-sm font-medium text-emerald-700"
-          >
-            <span>💰</span> 거래처 수익성
-          </a>
-          <a
-            href="/claims/sla"
-            className="flex items-center gap-2 bg-white rounded-xl border border-red-200 px-4 py-2.5 hover:bg-red-50 transition-colors text-sm font-medium text-red-700"
-          >
-            <span>📊</span> SLA 분석
-          </a>
-          <a
-            href="/yield/cost-analysis"
-            className="flex items-center gap-2 bg-white rounded-xl border border-emerald-200 px-4 py-2.5 hover:bg-emerald-50 transition-colors text-sm font-medium text-emerald-700"
-          >
-            <span>💰</span> 원가분석
-          </a>
-          <a
-            href="/procurement"
-            className="flex items-center gap-2 bg-white rounded-xl border border-[#1F3864]/20 px-4 py-2.5 hover:bg-[#1F3864]/5 transition-colors text-sm font-medium text-[#1F3864]"
-          >
-            <span>📋</span> 자재소요계획
-          </a>
-          <a
-            href="/inventory"
-            className={`flex items-center gap-2 bg-white rounded-xl border px-4 py-2.5 hover:bg-orange-50 transition-colors text-sm font-medium ${
-              expiryAlertCount > 0 ? "border-orange-300 text-orange-700" : "border-[#1F3864]/20 text-[#1F3864]"
-            }`}
-          >
-            <span>⏰</span> 유통기한
-            {expiryAlertCount > 0 && (
-              <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold">
-                {expiryAlertCount}
-              </span>
-            )}
-          </a>
-        </div>
-
-        {/* 요약 카드 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="비용 결재 대기" value={`${pendingApprovals}건`} sub="승인 필요" color="text-amber-600" />
-          <StatCard
-            label="부서 보고 검토 대기"
-            value={`${pendingReviews}건`}
-            sub={`총 ${reportSubmitted}개 부서 보고 (DB)`}
-            color={pendingReviews > 0 ? "text-amber-600" : "text-emerald-600"}
-          />
-          <StatCard
-            label="미처리 클레임"
-            value={`${pendingClaimsCount ?? 0}건`}
-            sub="pending 상태 (DB)"
-            color={(pendingClaimsCount ?? 0) > 0 ? "text-red-600" : "text-emerald-600"}
-          />
-          <StatCard
-            label="재고 부족 품목"
-            value={inventoryRows.length === 0 ? "-" : `${lowStockCount}종`}
-            sub={inventoryRows.length === 0 ? "창고 재고 미등록" : `전체 ${inventoryRows.length}개 품목`}
-            color={lowStockCount > 0 ? "text-amber-600" : "text-emerald-600"}
-          />
-        </div>
+        {/* ─── ① 오늘 한눈에 ──────────────────────────────────── */}
+        <section>
+          <SectionHeader title="오늘 한눈에" badge={today} />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <a href="#approvals" className="block hover:opacity-80 transition-opacity">
+              <StatCard
+                icon="✅"
+                label="결재 대기"
+                value={`${pendingApprovals}건`}
+                sub={pendingApprovals > 0 ? "승인 필요" : "모두 처리됨"}
+                tone={pendingApprovals > 0 ? "bad" : "good"}
+              />
+            </a>
+            <a href="/claims" className="block hover:opacity-80 transition-opacity">
+              <StatCard
+                icon="📋"
+                label="클레임"
+                value={`${pendingClaimsCount ?? 0}건`}
+                sub="미처리 (pending)"
+                tone={(pendingClaimsCount ?? 0) > 0 ? "bad" : "good"}
+              />
+            </a>
+            <a href="/inventory" className="block hover:opacity-80 transition-opacity">
+              <StatCard
+                icon="🏭"
+                label="재고 부족"
+                value={inventoryRows.length === 0 ? "-" : `${lowStockCount}건`}
+                sub={inventoryRows.length === 0 ? "창고 재고 미등록" : `전체 ${inventoryRows.length}개 품목`}
+                tone={lowStockCount > 0 ? "warn" : "good"}
+              />
+            </a>
+            <a href="/maintenance/schedule" className="block hover:opacity-80 transition-opacity">
+              <StatCard
+                icon="🔧"
+                label="정비 지연"
+                value={`${overdueMaintenanceCount}건`}
+                sub={lowSparePartsCount > 0 ? `부품 부족 ${lowSparePartsCount}건` : "예방정비 스케줄"}
+                tone={overdueMaintenanceCount > 0 ? "warn" : "good"}
+              />
+            </a>
+          </div>
+        </section>
 
         {/* 유통기한 경고 */}
         {expiryAlertCount > 0 && (
@@ -364,31 +232,34 @@ export default async function COOPage() {
           </div>
         )}
 
-        {/* ─── 오늘의 운영 현황 ────────────────────────────────── */}
+        {/* ─── ② 결재 대기 상세 ───────────────────────────────── */}
+        <div id="approvals">
+          <CostApprovalSection items={costApprovals ?? []} />
+        </div>
+
+        {/* ─── ③ 오늘의 현장 ──────────────────────────────────── */}
         <section>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            📅 오늘의 운영 현황 <span className="text-gray-400 font-normal normal-case ml-1">({today})</span>
-          </h2>
+          <SectionHeader title="📅 오늘의 현장" badge={today} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
             {/* 오늘 납품 현황 */}
-            <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-4">
+            <Card className="lg:col-span-2" padding="p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-semibold text-gray-700">🚚 오늘 납품 현황</span>
                 <span className="text-xs text-gray-400">{(todayDeliveries ?? []).length}건</span>
               </div>
               {(todayDeliveries ?? []).length === 0 ? (
-                <div className="text-xs text-gray-400 py-4 text-center">오늘 납품전표 없음</div>
+                <EmptyState icon="🚚" message="오늘 납품전표 없음" />
               ) : (
                 <div className="flex flex-col gap-2">
                   {(todayDeliveries ?? []).map((d) => {
-                    const statusMap: Record<string, { label: string; color: string }> = {
-                      shipped:   { label: "배송중",   color: "bg-amber-100 text-amber-700" },
-                      delivered: { label: "배송완료", color: "bg-emerald-100 text-emerald-700" },
-                      pending:   { label: "대기",     color: "bg-gray-100 text-gray-600" },
-                      cancelled: { label: "취소",     color: "bg-red-100 text-red-600" },
+                    const statusMap: Record<string, { label: string; tone: "green" | "yellow" | "red" | "gray" }> = {
+                      shipped:   { label: "배송중",   tone: "yellow" },
+                      delivered: { label: "배송완료", tone: "green" },
+                      pending:   { label: "대기",     tone: "gray" },
+                      cancelled: { label: "취소",     tone: "red" },
                     };
-                    const st = statusMap[d.status] ?? { label: d.status, color: "bg-gray-100 text-gray-600" };
+                    const st = statusMap[d.status] ?? { label: d.status, tone: "gray" as const };
                     const itemCount = Array.isArray(d.items) ? d.items.length : 0;
                     return (
                       <div key={d.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
@@ -402,7 +273,7 @@ export default async function COOPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
+                          <StatusBadge tone={st.tone}>{st.label}</StatusBadge>
                           <span className="text-sm font-bold text-[#1F3864]">
                             {d.total_amount ? `${(d.total_amount / 10000).toFixed(0)}만` : "-"}
                           </span>
@@ -412,18 +283,18 @@ export default async function COOPage() {
                   })}
                 </div>
               )}
-            </div>
+            </Card>
 
-            {/* 오늘 생산 + 입고 */}
+            {/* 오늘 생산 + 입고 + 위생점검 */}
             <div className="flex flex-col gap-3">
               {/* 오늘 생산 */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <Card padding="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-semibold text-gray-700">🏭 오늘 생산</span>
                   <span className="text-xs text-gray-400">{(todayProdLogs ?? []).length}건</span>
                 </div>
                 {(todayProdLogs ?? []).length === 0 ? (
-                  <div className="text-xs text-gray-400 py-2 text-center">생산일지 없음</div>
+                  <EmptyState message="생산일지 없음" />
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {(todayProdLogs ?? []).map((p, i) => (
@@ -440,15 +311,15 @@ export default async function COOPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </Card>
 
               {/* 오늘 농협 입고 */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <Card padding="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-semibold text-gray-700">🐷 오늘 입고</span>
                 </div>
                 {(todayIntake ?? []).length === 0 ? (
-                  <div className="text-xs text-gray-400 py-2 text-center">농협 입고 기록 없음</div>
+                  <EmptyState message="농협 입고 기록 없음" />
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {(todayIntake ?? []).map((it, i) => (
@@ -459,26 +330,34 @@ export default async function COOPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </Card>
             </div>
+          </div>
+
+          {/* 오늘 위생점검 */}
+          <div className="mt-4">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-sm font-semibold text-gray-700">🧤 오늘 위생점검</span>
+              {todayHygiene && todayHygiene.length > 0 && (
+                <span className="text-xs text-gray-400">클릭하면 항목별 상세 확인</span>
+              )}
+            </div>
+            <HygieneCheckDetail checks={todayHygiene ?? []} />
           </div>
         </section>
 
-        {/* ─── 부서별 주간 보고 + COO 코멘트 ──────────────────── */}
+        {/* ─── ④ 부서별 주간 보고 + COO 코멘트 ────────────────── */}
         <section>
-          <div className="flex items-center gap-3 mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-              부서별 주간 보고 검토
-            </h2>
-            <span className="text-xs text-gray-400">
-              코멘트 입력 → CEO 대시보드 즉시 반영
-            </span>
-            {pendingReviews > 0 && (
-              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold ml-auto">
-                검토 대기 {pendingReviews}건
+          <SectionHeader
+            title="부서별 주간 보고 검토"
+            badge={pendingReviews > 0 ? `검토 대기 ${pendingReviews}건` : undefined}
+            badgeColor="amber"
+            action={
+              <span className="text-xs text-gray-400">
+                {reportSubmitted}개 부서 보고 · 코멘트 입력 → CEO 대시보드 즉시 반영
               </span>
-            )}
-          </div>
+            }
+          />
 
           {latestByDept.size > 0 ? (
             <div className="flex flex-col gap-2">
@@ -502,46 +381,77 @@ export default async function COOPage() {
               })}
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-              <div className="text-4xl mb-3">📭</div>
-              <div className="text-sm font-medium text-gray-600">아직 팀장이 제출한 보고서가 없습니다</div>
-              <div className="text-xs text-gray-400 mt-1">각 부서 팀장이 주간 보고서를 제출하면 여기에 나타납니다</div>
-            </div>
+            <Card padding="p-2">
+              <EmptyState
+                icon="📭"
+                message="아직 팀장이 제출한 보고서가 없습니다"
+                hint="각 부서 팀장이 주간 보고서를 제출하면 여기에 나타납니다"
+              />
+            </Card>
           )}
         </section>
 
-        {/* 오늘 위생점검 */}
+        {/* ─── ⑤ Action Items ─────────────────────────────────── */}
         <section>
-          <div className="flex items-center gap-3 mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">오늘 위생점검</h2>
-            {todayHygiene && todayHygiene.length > 0 && (
-              <span className="text-xs text-gray-400">클릭하면 항목별 상세 확인</span>
-            )}
+          <SectionHeader
+            title="Action Items"
+            badge={`${actionItems.length}건 · DB`}
+            action={
+              delayedActions > 0 ? (
+                <StatusBadge tone="red">지연 {delayedActions}건</StatusBadge>
+              ) : undefined
+            }
+          />
+          <ActionItems items={actionItems} />
+        </section>
+
+        {/* ─── ⑥ 재고/유틸리티 현황 ───────────────────────────── */}
+        <section>
+          <SectionHeader title="재고 · 유틸리티 현황" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <a href="/inventory" className="block hover:opacity-80 transition-opacity">
+              <StatCard
+                icon="🏭"
+                label="재고 부족 품목"
+                value={inventoryRows.length === 0 ? "-" : `${lowStockCount}종`}
+                sub={inventoryRows.length === 0 ? "창고 재고 미등록" : `전체 ${inventoryRows.length}개 품목`}
+                tone={lowStockCount > 0 ? "warn" : "good"}
+              />
+            </a>
+            <a href="/inventory" className="block hover:opacity-80 transition-opacity">
+              <StatCard
+                icon="⏰"
+                label="유통기한 임박"
+                value={`${expiryAlertCount}건`}
+                sub="30일 이내 도래"
+                tone={expiryAlertCount > 0 ? "warn" : "good"}
+              />
+            </a>
+            <a href="/maintenance/schedule" className="block hover:opacity-80 transition-opacity">
+              <StatCard
+                icon="🔩"
+                label="부품 부족"
+                value={`${lowSparePartsCount}건`}
+                sub="최소 재고 미달"
+                tone={lowSparePartsCount > 0 ? "warn" : "good"}
+              />
+            </a>
+            <a href="/utility" className="block hover:opacity-80 transition-opacity">
+              <StatCard
+                icon="⚡"
+                label="유틸리티 비용"
+                value={utilityRisk === "red" ? "위험" : utilityRisk === "yellow" ? "주의" : "정상"}
+                sub="직전 3개월 평균 대비"
+                tone={utilityRisk === "red" ? "bad" : utilityRisk === "yellow" ? "warn" : "good"}
+              />
+            </a>
           </div>
-          <HygieneCheckDetail checks={todayHygiene ?? []} />
         </section>
 
         {/* 긴급 알림 */}
         <section>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">긴급 알림</h2>
+          <SectionHeader title="긴급 알림" />
           <AlertPanel alerts={alerts} />
-        </section>
-
-        {/* 비용 승인 */}
-        <CostApprovalSection items={costApprovals ?? []} />
-
-        {/* Action Items */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-              Action Items
-              <span className="ml-2 text-gray-400 font-normal normal-case">({actionItems.length}건 · DB)</span>
-            </h2>
-            {delayedActions > 0 && (
-              <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">지연 {delayedActions}건</span>
-            )}
-          </div>
-          <ActionItems items={actionItems} />
         </section>
 
         <footer className="text-center text-xs text-gray-400 py-4 border-t border-gray-200">
