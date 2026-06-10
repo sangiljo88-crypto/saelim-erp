@@ -2,6 +2,7 @@ import { logout } from "@/app/actions/auth";
 import { SessionPayload } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import NotificationBell from "@/components/NotificationBell";
+import NavMenu from "@/components/NavMenu";
 
 const roleLabel: Record<string, string> = {
   ceo: "대표이사",
@@ -18,17 +19,22 @@ const roleColor: Record<string, string> = {
 };
 
 export default async function AppHeader({ session, subtitle }: { session: SessionPayload; subtitle?: string }) {
-  // 최근 7일 내 새 브리핑 여부 확인
-  const db = createServerClient();
-  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { count: newBriefingsCount } = await db
-    .from("briefings")
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", since);
-  const hasNew = (newBriefingsCount ?? 0) > 0;
+  // 최근 7일 내 새 브리핑 여부 확인 (실패해도 헤더는 렌더)
+  let hasNew = false;
+  try {
+    const db = createServerClient();
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { count } = await db
+      .from("briefings")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", since);
+    hasNew = (count ?? 0) > 0;
+  } catch {
+    // DB 미연결 시 무시
+  }
 
   return (
-    <header className="bg-[#1F3864] text-white shadow-lg">
+    <header className="bg-[#1F3864] text-white shadow-lg sticky top-0 z-40">
       <div className="px-4 sm:px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm font-bold shrink-0">새</div>
@@ -58,120 +64,8 @@ export default async function AppHeader({ session, subtitle }: { session: Sessio
         </div>
       </div>
 
-      {/* 네비게이션 바 */}
-      <nav className="px-4 sm:px-6 pb-2 flex items-center gap-1 overflow-x-auto">
-        <a
-          href={session.role === "ceo" ? "/dashboard" : session.role === "coo" ? "/coo" : session.role === "worker" ? "/worker" : "/team"}
-          className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0"
-        >
-          🏠 홈
-        </a>
-
-        {/* 브리핑 — 새 글 있으면 빨간 점 */}
-        <a
-          href="/briefings"
-          className="relative text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0"
-        >
-          📰 브리핑
-          {hasNew && (
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-400 rounded-full" />
-          )}
-        </a>
-
-        <a href="/schedule" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-          📅 일정
-        </a>
-
-        {(session.role === "coo" || session.role === "ceo") && (
-          <a href="/report" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            📋 주간보고
-          </a>
-        )}
-        {session.role !== "worker" && (
-          <a href="/approvals" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            💰 비용승인
-          </a>
-        )}
-        <a href="/dispatch" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-          🚚 배차
-        </a>
-        <a href="/customers" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-          🤝 거래처
-        </a>
-        {(session.role === "coo" || session.role === "ceo" || session.role === "manager") && (
-          <a href="/deliveries" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            🚚 납품이력
-          </a>
-        )}
-        {(session.role === "coo" || session.role === "ceo" || session.role === "manager") && (
-          <a href="/inspection" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            📋 검품
-          </a>
-        )}
-        {(session.role === "coo" || session.role === "ceo" || session.role === "manager") && (
-          <a href="/lot" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            📦 LOT
-          </a>
-        )}
-        {(session.role === "coo" || session.role === "manager") && (
-          <a href="/purchases" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            📦 매입관리
-          </a>
-        )}
-        {(session.role === "coo" || session.role === "ceo" || (session.role === "manager" && ["재고팀", "생산팀"].includes(session.dept ?? ""))) && (
-          <a href="/procurement" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            📋 자재소요
-          </a>
-        )}
-        {(session.role === "coo" || session.role === "ceo") && (
-          <a href="/accounting" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            🧾 회계
-          </a>
-        )}
-        {(session.role === "coo" || session.role === "ceo") && (
-          <a href="/yield" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            📊 수율
-          </a>
-        )}
-        {(session.role === "coo" || session.role === "ceo") && (
-          <a href="/claims" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            📋 클레임
-          </a>
-        )}
-        {(session.role === "coo" || session.role === "ceo") && (
-          <a href="/inventory" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            🏭 재고
-          </a>
-        )}
-        {(session.role === "coo" || session.role === "ceo") && (
-          <a href="/maintenance" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            🔧 설비
-          </a>
-        )}
-        {(session.role === "coo" || session.role === "ceo") && (
-          <a href="/utility" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            ⚡ 유틸리티
-          </a>
-        )}
-        {(session.role === "coo" || session.role === "ceo") && (
-          <a href="/staff" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            👥 직원 관리
-          </a>
-        )}
-        {session.role === "coo" && (
-          <a href="/payroll" className="text-xs text-blue-200 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors shrink-0">
-            💴 급여
-          </a>
-        )}
-        {session.role === "coo" && (
-          <a
-            href="/briefings/new"
-            className="text-xs bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg transition-colors shrink-0 font-semibold"
-          >
-            ✏️ 브리핑 등록
-          </a>
-        )}
-      </nav>
+      {/* 그룹형 네비게이션 (역할별 자동 필터) */}
+      <NavMenu role={session.role} dept={session.dept} hasNewBriefing={hasNew} />
     </header>
   );
 }
