@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { saveCooComment } from "@/app/actions/reporting";
 import { RAG_DOT } from "@/lib/constants";
+import StatusBadge from "@/components/ui/StatusBadge";
 
 interface Props {
   reportId: string;
@@ -14,6 +15,8 @@ interface Props {
   detail?: string | null;
   nextAction?: string | null;
   reportDate: string;
+  /** 이번 주(월~일) 보고가 아직 제출되지 않음 — 표시 중인 보고는 이전 주차 */
+  notSubmittedThisWeek?: boolean;
 }
 
 const RAG_BADGE: Record<string, string> = {
@@ -26,6 +29,7 @@ const RAG_LABEL: Record<string, string> = { green: "정상", yellow: "주의", r
 export default function CooCommentBox({
   reportId, dept, existingComment, managerName,
   issue, ragStatus, detail, nextAction, reportDate,
+  notSubmittedThisWeek = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [comment, setComment] = useState(existingComment ?? "");
@@ -56,6 +60,9 @@ export default function CooCommentBox({
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${RAG_BADGE[ragStatus] ?? "bg-gray-100 text-gray-600"}`}>
               {RAG_LABEL[ragStatus] ?? ragStatus}
             </span>
+            {notSubmittedThisWeek && (
+              <StatusBadge tone="gray">이번 주 미제출</StatusBadge>
+            )}
             {saved && (
               <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">코멘트 저장됨</span>
             )}
@@ -64,7 +71,9 @@ export default function CooCommentBox({
         </div>
         <div className="text-right shrink-0">
           <div className="text-xs text-gray-400">{managerName}</div>
-          <div className="text-xs text-gray-400">{reportDate}</div>
+          <div className={`text-xs ${notSubmittedThisWeek ? "text-amber-500 font-medium" : "text-gray-400"}`}>
+            📋 {reportDate} 보고
+          </div>
         </div>
         <span className="text-gray-400 ml-2">{open ? "▲" : "▼"}</span>
       </button>

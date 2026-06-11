@@ -102,6 +102,13 @@ export default async function COOPage() {
     if (!latestByDept.has(r.dept)) latestByDept.set(r.dept, r);
   }
 
+  // 이번 주(월~일) 시작일 — 보고 미제출 판정 기준
+  const todayDate = new Date(`${today}T00:00:00Z`);
+  const dayOfWeek = todayDate.getUTCDay() || 7; // 월=1 … 일=7
+  const weekMonday = new Date(todayDate);
+  weekMonday.setUTCDate(todayDate.getUTCDate() - (dayOfWeek - 1));
+  const weekStart = weekMonday.toISOString().split("T")[0];
+
   const actionItems: ActionItemRow[] = (dbActionItems ?? []).map((a) => ({
     id: a.id as string, title: a.title, dept: a.dept,
     deadline: a.deadline, status: a.status as ActionItemRow["status"],
@@ -376,6 +383,7 @@ export default async function COOPage() {
                     nextAction={r.next_action}
                     existingComment={r.coo_comment}
                     reportDate={r.report_date}
+                    notSubmittedThisWeek={r.report_date < weekStart}
                   />
                 );
               })}
