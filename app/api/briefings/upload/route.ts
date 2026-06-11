@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
+import { normalizeWeekLabel } from "@/lib/week-label";
 
 // 빌드 시점 최적화 방지 — 환경변수를 항상 런타임에 읽도록 강제
 export const dynamic = "force-dynamic";
@@ -66,12 +67,15 @@ export async function POST(req: NextRequest) {
   const noHeadTags  = stripHeadTags(bodyOnly);
   const cleanedHtml = stripHljsSpans(noHeadTags);
 
+  // ── 주차 라벨 정규화 — 어떤 형식이 와도 "YYYY년 M월 N주차" 표준형으로 저장
+  const normalizedWeek = normalizeWeekLabel(String(week_label), String(publish_date));
+
   // ── Supabase insert ──────────────────────────────────────────
   const db = createServerClient();
   const { data, error } = await db
     .from("briefings")
     .insert({
-      week_label:   String(week_label),
+      week_label:   normalizedWeek.label,
       publish_date: String(publish_date),
       category:     String(target_dept ?? "업계동향"),
       title:        String(title),

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toggleBriefingPin, deleteBriefing } from "@/app/actions/reporting";
+import { normalizeWeekLabel } from "@/lib/week-label";
 
 export interface BriefingSummary {
   id: string;
@@ -81,16 +82,17 @@ export default function BriefingList({
   const pinned   = filtered.filter((b) => b.is_pinned).sort((a, b) => b.publish_date.localeCompare(a.publish_date));
   const unpinned = filtered.filter((b) => !b.is_pinned).sort((a, b) => b.publish_date.localeCompare(a.publish_date));
 
-  // week_label 순서로 그룹핑 (중복 제거 후 최신순)
-  const weekOrder: string[] = [];
-  const weekGroups: Record<string, BriefingSummary[]> = {};
+  // 주차 정규화 키로 그룹핑 — 형식이 달라도 같은 주는 한 그룹으로 (lib/week-label.ts)
+  // 그룹 정렬: sortKey(ISO 주차) 내림차순, 라벨은 표준형으로 표시
+  const weekGroups: Record<string, { label: string; items: BriefingSummary[] }> = {};
   for (const b of unpinned) {
-    if (!weekGroups[b.week_label]) {
-      weekOrder.push(b.week_label);
-      weekGroups[b.week_label] = [];
+    const norm = normalizeWeekLabel(b.week_label, b.publish_date);
+    if (!weekGroups[norm.sortKey]) {
+      weekGroups[norm.sortKey] = { label: norm.label, items: [] };
     }
-    weekGroups[b.week_label].push(b);
+    weekGroups[norm.sortKey].items.push(b);
   }
+  const weekOrder = Object.keys(weekGroups).sort((a, b) => b.localeCompare(a));
 
   // ── 이벤트 핸들러 ────────────────────────────────────────────
   async function handlePin(id: string, current: boolean) {
@@ -284,11 +286,11 @@ export default function BriefingList({
           )}
 
           {/* 📅 주차별 그룹 */}
-          {weekOrder.map((weekLabel, idx) => {
-            const items = weekGroups[weekLabel];
+          {weekOrder.map((weekKey, idx) => {
+            const { label: weekLabel, items } = weekGroups[weekKey];
             const isLatest = idx === 0;
             return (
-              <div key={weekLabel} className="flex flex-col gap-2">
+              <div key={weekKey} className="flex flex-col gap-2">
                 {/* 주차 헤더 */}
                 <div className="flex items-center gap-3">
                   <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold shrink-0 ${
