@@ -62,6 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "경영지원",
     items: [
       { label: "비용 승인",     href: "/approvals",             roles: MGMT_MGR },
+      { label: "회의록",        href: "/meetings",              roles: MGMT_MGR },
       { label: "주간보고",      href: "/report",                roles: MGMT },
       { label: "회계",          href: "/accounting",            roles: MGMT },
       { label: "급여",          href: "/payroll",               roles: [], cooOnly: true },
