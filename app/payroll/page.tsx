@@ -1,4 +1,4 @@
-import { getSession, MOCK_USERS } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import PayrollSheet from "@/components/PayrollSheet";
@@ -34,18 +34,10 @@ export default async function PayrollPage({ searchParams }: Props) {
       .eq("active", true),
   ]);
 
-  // 전체 직원 목록 조합 (DB + MOCK, 작업자/팀장만)
-  const mockStaff = MOCK_USERS
-    .filter(u => !["ceo", "coo", "worker1", "worker2", "prod"].includes(u.id))
-    .filter(u => u.role === "worker" || u.role === "manager")
-    .map(u => ({ login_id: u.id, name: u.name, role: u.role, dept: u.dept ?? null }));
-
-  const dbStaff = (dbMembers ?? [])
+  // 실제 직원 명부(DB members)만 표시 — 테스트용 MOCK 계정은 급여 대상에서 제외
+  const allStaff = (dbMembers ?? [])
     .filter(m => m.role === "worker" || m.role === "manager")
     .map(m => ({ login_id: m.login_id, name: m.name, role: m.role, dept: m.dept ?? null }));
-
-  const dbLoginIds = new Set(dbStaff.map(m => m.login_id));
-  const allStaff = [...dbStaff, ...mockStaff.filter(m => !dbLoginIds.has(m.login_id))];
 
   // 기본급 맵
   const salaryMap: Record<string, number> = {};
